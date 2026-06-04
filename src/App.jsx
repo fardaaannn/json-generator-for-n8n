@@ -6,6 +6,7 @@ import { getNodeClass } from './lib/getNodeClass'
 import { useLanguage } from './lib/i18n'
 import Header from './components/Header'
 import Hero from './components/Hero'
+import References from './components/References'
 import Footer from './components/Footer'
 
 export default function App() {
@@ -393,6 +394,8 @@ export default function App() {
           </div>
         </div>
       </main>
+
+      <References />
 
       <Footer />
     </>
