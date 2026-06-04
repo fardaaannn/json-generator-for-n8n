@@ -2,6 +2,20 @@
 
 Generate workflow n8n JSON dari deskripsi teks menggunakan AI — langsung dari browser, tanpa backend.
 
+## Tampilan
+
+<p align="center">
+  <img src="Screenshots/Screenshot%202026-06-05%20024305.png" alt="Halaman utama n8n Workflow Generator (hero)" width="100%">
+</p>
+
+<p align="center">
+  <img src="Screenshots/Screenshot%202026-06-05%20024342.png" alt="Form deskripsi workflow, contoh cepat, dan panel Output JSON" width="100%">
+</p>
+
+<p align="center">
+  <img src="Screenshots/Screenshot%202026-06-05%20024410.png" alt="Pilihan AI Provider, API key, dan opsi workflow" width="100%">
+</p>
+
 ## Fitur
 
 - **Generate workflow JSON** dari deskripsi natural language
