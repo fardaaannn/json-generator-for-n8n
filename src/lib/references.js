@@ -11,6 +11,14 @@ export const REFERENCES = [
     descEn: 'A curated set of hundreds of ready-to-use n8n templates, grouped by category (Gmail, Telegram, Slack, OpenAI, and more).',
   },
   {
+    id: 'n8n-free-templates',
+    name: 'n8n-free-templates',
+    author: 'wassupjay',
+    url: 'https://github.com/wassupjay/n8n-free-templates',
+    descId: 'Lebih dari 200 template plug-and-play yang memadukan automasi klasik dengan AI stack modern (vector DB, embeddings, LLM). Import JSON, isi kredensial, lalu aktifkan.',
+    descEn: 'Over 200 plug-and-play templates that blend classic automation with a modern AI stack (vector DBs, embeddings, LLMs). Import the JSON, add your credentials, then activate.',
+  },
+  {
     id: 'n8nworkflows-xyz',
     name: 'n8nworkflows.xyz',
     author: 'nusquama',
