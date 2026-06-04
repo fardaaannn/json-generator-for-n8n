@@ -5,6 +5,7 @@ export const translations = {
     // Header / language
     langName: 'ID',
     switchLang: 'Ganti bahasa',
+    toggleTheme: 'Ganti tema terang/gelap',
     // Hero
     heroBadge: 'Generator workflow n8n berbasis AI',
     heroTitle1: 'Buat workflow n8n',
@@ -73,13 +74,30 @@ export const translations = {
     warnNodeNoPos: 'Node #{n} ({name}) tidak memiliki position',
     warnConnections: '"connections" harus berupa object',
     warnName: '"name" harus berupa string',
+    warnRepaired: 'Output JSON tidak lengkap dan diperbaiki otomatis \u2014 periksa kembali isinya.',
+    warnDupId: 'Ada id node duplikat: {id}',
+    warnNodeTypeFormat: 'Node #{n} ({name}) punya format type tidak lazim: {type}',
+    warnNodeNoParams: 'Node #{n} ({name}) tidak memiliki parameters',
+    warnConnUnknownSource: 'Connection merujuk node sumber yang tidak ada: {name}',
+    warnConnUnknownTarget: 'Connection merujuk node tujuan yang tidak ada: {name}',
     unnamed: 'tanpa nama',
     errJsonInvalid: 'JSON tidak valid. Coba sederhanakan deskripsi.',
+    errTimeout: 'Permintaan melebihi batas waktu ({s} detik). Coba lagi atau sederhanakan deskripsi.',
+    errNetwork: 'Gangguan jaringan: {msg}',
+    // password toggle
+    showKey: 'Tampilkan API key',
+    hideKey: 'Sembunyikan API key',
+    // footer
+    footerTagline: 'Generator workflow n8n berbasis AI',
+    footerSource: 'Kode sumber',
+    footerPrivacy: 'API key tidak pernah menyentuh server kami \u2014 request langsung dari browser ke provider.',
+    footerDisclaimer: 'Proyek independen, tidak berafiliasi dengan n8n.',
   },
   en: {
     // Header / language
     langName: 'EN',
     switchLang: 'Switch language',
+    toggleTheme: 'Toggle light/dark theme',
     // Hero
     heroBadge: 'AI-powered n8n workflow generator',
     heroTitle1: 'Build n8n workflows',
@@ -148,8 +166,24 @@ export const translations = {
     warnNodeNoPos: 'Node #{n} ({name}) is missing a position',
     warnConnections: '"connections" must be an object',
     warnName: '"name" must be a string',
+    warnRepaired: 'The JSON output was incomplete and auto-repaired \u2014 please review it.',
+    warnDupId: 'Duplicate node id found: {id}',
+    warnNodeTypeFormat: 'Node #{n} ({name}) has an unusual type format: {type}',
+    warnNodeNoParams: 'Node #{n} ({name}) is missing parameters',
+    warnConnUnknownSource: 'A connection references a source node that does not exist: {name}',
+    warnConnUnknownTarget: 'A connection references a target node that does not exist: {name}',
     unnamed: 'unnamed',
     errJsonInvalid: 'Invalid JSON. Try simplifying the description.',
+    errTimeout: 'The request timed out ({s} seconds). Try again or simplify the description.',
+    errNetwork: 'Network error: {msg}',
+    // password toggle
+    showKey: 'Show API key',
+    hideKey: 'Hide API key',
+    // footer
+    footerTagline: 'AI-powered n8n workflow generator',
+    footerSource: 'Source code',
+    footerPrivacy: 'Your API key never touches our servers \u2014 requests go straight from your browser to the provider.',
+    footerDisclaimer: 'An independent project, not affiliated with n8n.',
   },
 }
 
