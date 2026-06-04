@@ -1,11 +1,12 @@
 import { useState, useEffect, useCallback } from 'react'
 import { PROVIDERS } from './lib/providers'
 import { EXAMPLES } from './lib/examples'
-import { sanitizeInput, buildPrompt, cleanOutput, repairJSON, validateStructure } from './lib/pipeline'
+import { sanitizeInput, buildPrompt, cleanOutput, repairJSON, validateStructure, sendRequest } from './lib/pipeline'
 import { getNodeClass } from './lib/getNodeClass'
 import { useLanguage } from './lib/i18n'
 import Header from './components/Header'
 import Hero from './components/Hero'
+import Footer from './components/Footer'
 
 export default function App() {
   const { t, lang: uiLang } = useLanguage()
@@ -32,6 +33,7 @@ export default function App() {
   const [status, setStatus] = useState({ state: '', key: 'statusReady', params: {} })
   const [errorMsg, setErrorMsg] = useState('')
   const [warnings, setWarnings] = useState([])
+  const [wasRepaired, setWasRepaired] = useState(false)
   const [isGenerating, setIsGenerating] = useState(false)
   const [copied, setCopied] = useState(false)
 
@@ -111,6 +113,7 @@ export default function App() {
     setIsGenerating(true)
     setErrorMsg('')
     setWarnings([])
+    setWasRepaired(false)
     setCurrentJSON('')
     setNodeTags([])
     setStatus({ state: 'active', key: 'statusGenerating', params: {} })
@@ -127,29 +130,13 @@ export default function App() {
       const baseUrlValue = provider === 'custom' ? baseUrl : undefined
       const req = cfg.buildRequest(effectiveModel, prompt, apiKey, baseUrlValue)
 
-      const res = await fetch(req.url, {
-        method: 'POST',
-        headers: req.headers,
-        body: req.body
-      })
-
-      if (!res.ok) {
-        let errMsg = 'HTTP ' + res.status
-        try {
-          const errData = await res.json()
-          errMsg = errData.error?.message || errData.message || errData.detail || errMsg
-        } catch(e) {
-          try { errMsg = (await res.text()).slice(0, 200) || errMsg } catch(e2) {}
-        }
-        throw new Error(errMsg + ' (' + res.status + ')')
-      }
-
-      const data = await res.json()
+      const data = await sendRequest(req, t)
       let raw = cfg.extract(data)
       raw = cleanOutput(raw)
-      const parsed = repairJSON(raw, t)
+      const { value: parsed, repaired } = repairJSON(raw, t)
       const pretty = JSON.stringify(parsed, null, 2)
 
+      setWasRepaired(repaired)
       const resultWarnings = validateStructure(parsed, t)
       setWarnings(resultWarnings)
       setCurrentJSON(pretty)
@@ -164,7 +151,7 @@ export default function App() {
       const nodeCount = parsed.nodes?.length || 0
       setStatus({
         state: 'done',
-        key: resultWarnings.length > 0 ? 'statusDoneWarn' : 'statusDone',
+        key: (resultWarnings.length > 0 || repaired) ? 'statusDoneWarn' : 'statusDone',
         params: { n: nodeCount }
       })
 
@@ -210,7 +197,7 @@ export default function App() {
           </div>
           <div className="card-body">
             <div>
-              <div className="field-label">{t('describeLabel')}</div>
+              <label className="field-label" htmlFor="desc">{t('describeLabel')}</label>
               <textarea
                 id="desc"
                 rows="8"
@@ -219,14 +206,14 @@ export default function App() {
                 onChange={(e) => { setDescription(e.target.value); setErrorMsg('') }}
                 placeholder={t('descPlaceholder')}
               />
-              <div className="char-count">{t('charCount', { n: description.length })}</div>
+              <div className="char-count" aria-hidden="true">{t('charCount', { n: description.length })}</div>
             </div>
 
             <div>
-              <div className="field-label">{t('quickExamples')}</div>
-              <div className="chips">
+              <div className="field-label" id="examples-label">{t('quickExamples')}</div>
+              <div className="chips" role="group" aria-labelledby="examples-label">
                 {Object.keys(examples).map((key) => (
-                  <button key={key} className="chip" onClick={() => fillExample(key)}>
+                  <button key={key} type="button" className="chip" onClick={() => fillExample(key)}>
                     {key}
                   </button>
                 ))}
@@ -235,12 +222,12 @@ export default function App() {
 
             <div className="divider"></div>
 
-            <div>
-              <div className="field-label">{t('aiProvider')}</div>
+            <fieldset className="field-group">
+              <legend className="field-label">{t('aiProvider')}</legend>
               <div className="grid-2">
                 <div>
-                  <div className="field-label">{t('provider')}</div>
-                  <select value={provider} onChange={handleProviderChange}>
+                  <label className="field-label" htmlFor="provider">{t('provider')}</label>
+                  <select id="provider" value={provider} onChange={handleProviderChange}>
                     <option value="anthropic">Anthropic (Claude)</option>
                     <option value="openai">OpenAI (GPT)</option>
                     <option value="groq">Groq</option>
@@ -249,8 +236,9 @@ export default function App() {
                   </select>
                 </div>
                 <div>
-                  <div className="field-label">{t('model')}</div>
+                  <label className="field-label" htmlFor="model">{t('model')}</label>
                   <select
+                    id="model"
                     value={selectedModel}
                     onChange={(e) => { setSelectedModel(e.target.value); setErrorMsg('') }}
                     disabled={provider === 'custom'}
@@ -264,20 +252,29 @@ export default function App() {
               </div>
               {showCustomModel && (
                 <div style={{marginTop:'10px'}}>
-                  <div className="field-label">{t('modelName')}</div>
-                  <input type="text" value={customModel} onChange={(e) => setCustomModel(e.target.value)} placeholder={t('modelNamePlaceholder')} />
+                  <label className="field-label" htmlFor="customModel">{t('modelName')}</label>
+                  <input id="customModel" type="text" value={customModel} onChange={(e) => setCustomModel(e.target.value)} placeholder={t('modelNamePlaceholder')} />
                 </div>
               )}
               <div style={{marginTop:'10px'}}>
-                <div className="field-label">{t('apiKey')} <span style={{fontWeight:400, opacity:0.7}}>{t('required')}</span></div>
+                <label className="field-label" htmlFor="apiKey">{t('apiKey')} <span style={{fontWeight:400, opacity:0.7}}>{t('required')}</span></label>
                 <div className="password-wrap">
                   <input
+                    id="apiKey"
                     type={showKey ? 'text' : 'password'}
                     value={apiKey}
                     onChange={(e) => setApiKey(e.target.value)}
                     placeholder="sk-..."
+                    aria-required="true"
+                    autoComplete="off"
                   />
-                  <button className="eye-btn" onClick={() => setShowKey(!showKey)} tabIndex={-1}>
+                  <button
+                    type="button"
+                    className="eye-btn"
+                    onClick={() => setShowKey(!showKey)}
+                    aria-label={showKey ? t('hideKey') : t('showKey')}
+                    aria-pressed={showKey}
+                  >
                     {showKey ? '\u25C9' : '\u25C7'}
                   </button>
                 </div>
@@ -287,76 +284,77 @@ export default function App() {
                     {t('rememberKey')}
                   </label>
                 </div>
-                <div className="security-notice">
+                <p className="security-notice">
                   {t('securityDirect')}
-                </div>
+                </p>
                 {rememberKey && (
-                  <div className="security-notice" style={{color:'#8D6E00'}}>
+                  <p className="security-notice warn">
                     {t('securityRemember')}
-                  </div>
+                  </p>
                 )}
               </div>
               {showBaseUrl && (
                 <div style={{marginTop:'10px'}}>
-                  <div className="field-label">{t('baseUrl')} <span style={{fontWeight:400,opacity:0.7}}>{t('baseUrlHint')}</span></div>
-                  <input type="url" value={baseUrl} onChange={(e) => setBaseUrl(e.target.value)} placeholder="https://ai.sumopod.com/v1" />
+                  <label className="field-label" htmlFor="baseUrl">{t('baseUrl')} <span style={{fontWeight:400,opacity:0.7}}>{t('baseUrlHint')}</span></label>
+                  <input id="baseUrl" type="url" value={baseUrl} onChange={(e) => setBaseUrl(e.target.value)} placeholder="https://ai.sumopod.com/v1" />
                 </div>
               )}
               <div style={{marginTop:'10px'}}>
                 <div className="connection-badge">
-                  <span style={{fontSize:'8px'}}>&#9679;</span> {t('directConnection')} &mdash; {providerConfig.name}
+                  <span style={{fontSize:'8px'}} aria-hidden="true">&#9679;</span> {t('directConnection')} &mdash; {providerConfig.name}
                 </div>
               </div>
-            </div>
+            </fieldset>
 
             <div className="divider"></div>
 
-            <div>
-              <div className="field-label">{t('options')}</div>
+            <fieldset className="field-group">
+              <legend className="field-label">{t('options')}</legend>
               <div className="grid-2">
                 <div>
-                  <div className="field-label">{t('wfName')}</div>
-                  <input type="text" value={wfName} onChange={(e) => setWfName(e.target.value)} placeholder="My Workflow" />
+                  <label className="field-label" htmlFor="wfName">{t('wfName')}</label>
+                  <input id="wfName" type="text" value={wfName} onChange={(e) => setWfName(e.target.value)} placeholder="My Workflow" />
                 </div>
                 <div>
-                  <div className="field-label">{t('n8nVersion')}</div>
-                  <select value={n8nVersion} onChange={(e) => setN8nVersion(e.target.value)}>
+                  <label className="field-label" htmlFor="n8nVersion">{t('n8nVersion')}</label>
+                  <select id="n8nVersion" value={n8nVersion} onChange={(e) => setN8nVersion(e.target.value)}>
                     <option value="1.x">{t('versionLatest')}</option>
                     <option value="0.x">{t('versionLegacy')}</option>
                   </select>
                 </div>
                 <div>
-                  <div className="field-label">{t('complexity')}</div>
-                  <select value={complexity} onChange={(e) => setComplexity(e.target.value)}>
+                  <label className="field-label" htmlFor="complexity">{t('complexity')}</label>
+                  <select id="complexity" value={complexity} onChange={(e) => setComplexity(e.target.value)}>
                     <option value="simple">{t('complexitySimple')}</option>
                     <option value="medium">{t('complexityMedium')}</option>
                     <option value="complex">{t('complexityComplex')}</option>
                   </select>
                 </div>
                 <div>
-                  <div className="field-label">{t('commentLang')}</div>
-                  <select value={lang} onChange={(e) => setLang(e.target.value)}>
+                  <label className="field-label" htmlFor="commentLang">{t('commentLang')}</label>
+                  <select id="commentLang" value={lang} onChange={(e) => setLang(e.target.value)}>
                     <option value="id">{t('optIndonesian')}</option>
                     <option value="en">{t('optEnglish')}</option>
                   </select>
                 </div>
               </div>
-            </div>
+            </fieldset>
 
-            <button className="btn-primary" onClick={handleGenerate} disabled={isGenerating}>
+            <button className="btn-primary" onClick={handleGenerate} disabled={isGenerating} aria-busy={isGenerating}>
               <span>{isGenerating ? t('generating') : t('generateBtn')}</span>
-              <div className="spinner" style={{display: isGenerating ? 'block' : 'none'}}></div>
+              <div className="spinner" style={{display: isGenerating ? 'block' : 'none'}} aria-hidden="true"></div>
             </button>
 
             {errorMsg && (
-              <div className="error-msg">
-                &#9888; {errorMsg}
+              <div className="error-msg" role="alert">
+                <span aria-hidden="true">&#9888; </span>{errorMsg}
               </div>
             )}
 
-            {warnings.length > 0 && !errorMsg && (
-              <div className="warning-msg">
-                <strong>&#9888; {t('warningTitle')}</strong> {t('warningBody')}<br />
+            {(warnings.length > 0 || wasRepaired) && !errorMsg && (
+              <div className="warning-msg" role="status">
+                <strong><span aria-hidden="true">&#9888; </span>{t('warningTitle')}</strong> {t('warningBody')}<br />
+                {wasRepaired && <span>&bull; {t('warnRepaired')}<br /></span>}
                 {warnings.map((w, i) => <span key={i}>&bull; {w}<br /></span>)}
               </div>
             )}
@@ -367,8 +365,8 @@ export default function App() {
           <div className="card-header">
             <span className="card-title">{t('outputTitle')}</span>
             <div style={{display:'flex', gap:'6px'}}>
-              <button className="btn-sm" onClick={handleCopy} disabled={!currentJSON}>{copied ? t('copied') : t('copy')}</button>
-              <button className="btn-sm btn-dl" onClick={handleDownload} disabled={!currentJSON}>&darr; {t('download')}</button>
+              <button type="button" className="btn-sm" onClick={handleCopy} disabled={!currentJSON}>{copied ? t('copied') : t('copy')}</button>
+              <button type="button" className="btn-sm btn-dl" onClick={handleDownload} disabled={!currentJSON}><span aria-hidden="true">&darr; </span>{t('download')}</button>
             </div>
           </div>
           <div className="output-toolbar">
@@ -382,19 +380,21 @@ export default function App() {
             </div>
           )}
           {currentJSON ? (
-            <pre className="output-code">{currentJSON}</pre>
+            <pre className="output-code" tabIndex={0} aria-label={t('outputTitle')}>{currentJSON}</pre>
           ) : (
             <div className="output-placeholder">
-              <div className="placeholder-icon">{'{ }'}</div>
+              <div className="placeholder-icon" aria-hidden="true">{'{ }'}</div>
               <div className="placeholder-text">{t('outputPlaceholder')}</div>
             </div>
           )}
-          <div className="status-bar">
-            <div className={'status-dot' + (status.state ? ' ' + status.state : '')}></div>
+          <div className="status-bar" role="status" aria-live="polite">
+            <div className={'status-dot' + (status.state ? ' ' + status.state : '')} aria-hidden="true"></div>
             <span>{t(status.key, status.params)}</span>
           </div>
         </div>
       </main>
+
+      <Footer />
     </>
   )
 }
