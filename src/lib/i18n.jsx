@@ -89,9 +89,10 @@ export const translations = {
     hideKey: 'Sembunyikan API key',
     // footer
     footerTagline: 'Generator workflow n8n berbasis AI',
-    footerSource: 'Kode sumber',
+    footerSource: 'Repo Github',
     footerPrivacy: 'API key tidak pernah menyentuh server kami \u2014 request langsung dari browser ke provider.',
-    footerDisclaimer: 'Proyek independen, tidak berafiliasi dengan n8n.',
+    footerDisclaimer: 'Proyek independen, tidak terafiliasi dengan n8n.',
+    footerFollow: 'Ikuti saya',
   },
   en: {
     // Header / language
@@ -181,9 +182,10 @@ export const translations = {
     hideKey: 'Hide API key',
     // footer
     footerTagline: 'AI-powered n8n workflow generator',
-    footerSource: 'Source code',
+    footerSource: 'Repo Github',
     footerPrivacy: 'Your API key never touches our servers \u2014 requests go straight from your browser to the provider.',
     footerDisclaimer: 'An independent project, not affiliated with n8n.',
+    footerFollow: 'Follow me',
   },
 }
 
