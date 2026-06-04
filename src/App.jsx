@@ -268,7 +268,7 @@ export default function App() {
                 </div>
               )}
               <div style={{marginTop:'10px'}}>
-                <div className="field-label">API Key <span style={{fontWeight:400, opacity:0.7}}>{provider === 'anthropic' ? '(opsional untuk Claude)' : '(wajib)'}</span></div>
+                <div className="field-label">API Key <span style={{fontWeight:400, opacity:0.7}}>{'(wajib)'}</span></div>
                 <div className="password-wrap">
                   <input
                     type={showKey ? 'text' : 'password'}
