@@ -93,6 +93,11 @@ export const translations = {
     footerPrivacy: 'API key tidak pernah menyentuh server kami \u2014 request langsung dari browser ke provider.',
     footerDisclaimer: 'Proyek independen, tidak terafiliasi dengan n8n.',
     footerFollow: 'Ikuti saya',
+    // references
+    refTitle: 'Butuh inspirasi? Koleksi workflow siap pakai',
+    refSubtitle: 'Kumpulan workflow n8n dari komunitas yang bisa kamu pelajari atau import langsung.',
+    refOpen: 'Buka',
+    refDisclaimer: 'Sumber pihak ketiga, bukan afiliasi kami. Selalu periksa isi & lisensi workflow sebelum di-import ke n8n kamu.',
   },
   en: {
     // Header / language
@@ -186,6 +191,11 @@ export const translations = {
     footerPrivacy: 'Your API key never touches our servers \u2014 requests go straight from your browser to the provider.',
     footerDisclaimer: 'An independent project, not affiliated with n8n.',
     footerFollow: 'Follow me',
+    // references
+    refTitle: 'Need inspiration? Ready-to-use workflow collections',
+    refSubtitle: 'Community n8n workflows you can study or import directly.',
+    refOpen: 'Open',
+    refDisclaimer: 'Third-party sources, not affiliated with us. Always review each workflow\u2019s content & license before importing into your n8n.',
   },
 }
 
