@@ -9,6 +9,7 @@ export const PROVIDERS = {
         headers: {
           'Content-Type': 'application/json',
           'anthropic-version': '2023-06-01',
+          'anthropic-dangerous-direct-browser-access': 'true',
           ...(apiKey ? {'x-api-key': apiKey} : {})
         },
         body: JSON.stringify({model, max_tokens: 8000, messages: [{role:'user', content: prompt}]})
