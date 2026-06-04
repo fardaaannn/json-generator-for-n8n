@@ -8,6 +8,7 @@ export const PROVIDERS = {
         url: this.url,
         headers: {
           'Content-Type': 'application/json',
+          'anthropic-version': '2023-06-01',
           ...(apiKey ? {'x-api-key': apiKey} : {})
         },
         body: JSON.stringify({model, max_tokens: 8000, messages: [{role:'user', content: prompt}]})
@@ -31,7 +32,7 @@ export const PROVIDERS = {
   groq: {
     name: 'Groq',
     url: 'https://api.groq.com/openai/v1/chat/completions',
-    models: ['llama-3.3-70b-versatile','llama-3.1-8b-instant','mixtral-8x7b-32768'],
+    models: ['llama-3.3-70b-versatile','llama-3.1-8b-instant','meta-llama/llama-4-scout-17b-16e-instruct'],
     buildRequest(model, prompt, apiKey) {
       return {
         url: this.url,
@@ -44,7 +45,7 @@ export const PROVIDERS = {
   openrouter: {
     name: 'OpenRouter',
     url: 'https://openrouter.ai/api/v1/chat/completions',
-    models: ['anthropic/claude-sonnet-4-5','openai/gpt-4o','google/gemini-2.0-flash-001','meta-llama/llama-3.3-70b-instruct'],
+    models: ['anthropic/claude-sonnet-4-5','openai/gpt-4o','google/gemini-2.5-flash','meta-llama/llama-3.3-70b-instruct'],
     buildRequest(model, prompt, apiKey) {
       return {
         url: this.url,
