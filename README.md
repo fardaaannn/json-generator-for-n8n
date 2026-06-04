@@ -46,7 +46,7 @@ Hasil build di folder `dist/` — bisa dibuka langsung atau dihosting ke static 
 
 | Provider | API Key | Model Default |
 |---|---|---|
-| Anthropic (Claude) | Opsional | claude-sonnet-4-20250514 |
+| Anthropic (Claude) | Wajib | claude-sonnet-4-20250514 |
 | OpenAI (GPT) | Wajib | gpt-4o |
 | Groq | Wajib | llama-3.3-70b-versatile |
 | OpenRouter | Wajib | anthropic/claude-sonnet-4-5 |
