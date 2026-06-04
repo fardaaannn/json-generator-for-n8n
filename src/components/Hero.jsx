@@ -1,12 +1,15 @@
+import { useLanguage } from '../lib/i18n'
+
 export default function Hero() {
+  const { t } = useLanguage()
   return (
     <section className="hero">
       <div className="badge">
         <span className="badge-dot"></span>
-        Generator workflow n8n berbasis AI
+        {t('heroBadge')}
       </div>
-      <h1>Buat workflow n8n<br />dari deskripsi teks</h1>
-      <p>Deskripsikan automasi yang kamu mau &mdash; AI akan generate JSON workflow n8n yang siap di-import, lengkap dengan nodes, connections, dan konfigurasi.</p>
+      <h1>{t('heroTitle1')}<br />{t('heroTitle2')}</h1>
+      <p>{t('heroDesc')}</p>
     </section>
   );
 }

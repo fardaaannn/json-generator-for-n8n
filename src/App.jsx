@@ -3,15 +3,18 @@ import { PROVIDERS } from './lib/providers'
 import { EXAMPLES } from './lib/examples'
 import { sanitizeInput, buildPrompt, cleanOutput, repairJSON, validateStructure } from './lib/pipeline'
 import { getNodeClass } from './lib/getNodeClass'
+import { useLanguage } from './lib/i18n'
 import Header from './components/Header'
 import Hero from './components/Hero'
 
 export default function App() {
+  const { t, lang: uiLang } = useLanguage()
+
   const [description, setDescription] = useState('')
   const [wfName, setWfName] = useState('My Workflow')
   const [n8nVersion, setN8nVersion] = useState('1.x')
   const [complexity, setComplexity] = useState('medium')
-  const [lang, setLang] = useState('id')
+  const [lang, setLang] = useState(uiLang)
 
   const [provider, setProvider] = useState('anthropic')
   const initialModels = PROVIDERS['anthropic'].models
@@ -26,12 +29,11 @@ export default function App() {
   const [currentJSON, setCurrentJSON] = useState('')
   const [nodeTags, setNodeTags] = useState([])
   const [outputFilename, setOutputFilename] = useState('workflow.json')
-  const [statusState, setStatusState] = useState('')
-  const [statusText, setStatusText] = useState('Siap')
+  const [status, setStatus] = useState({ state: '', key: 'statusReady', params: {} })
   const [errorMsg, setErrorMsg] = useState('')
   const [warnings, setWarnings] = useState([])
   const [isGenerating, setIsGenerating] = useState(false)
-  const [copyBtnText, setCopyBtnText] = useState('Salin')
+  const [copied, setCopied] = useState(false)
 
   useEffect(() => {
     const storedKey = localStorage.getItem('n8n_gen_api_key')
@@ -76,15 +78,17 @@ export default function App() {
     }
   }, [apiKey])
 
-  const fillExample = useCallback((text) => {
-    setDescription(EXAMPLES[text] || text)
+  const examples = EXAMPLES[uiLang] || EXAMPLES.en
+
+  const fillExample = useCallback((key) => {
+    setDescription(examples[key] || key)
     setErrorMsg('')
-  }, [])
+  }, [examples])
 
   const handleGenerate = useCallback(async () => {
     const cleaned = sanitizeInput(description)
     if (!cleaned) {
-      setErrorMsg('Masukkan deskripsi workflow dulu ya!')
+      setErrorMsg(t('errEnterDesc'))
       return
     }
 
@@ -92,15 +96,15 @@ export default function App() {
     const effectiveModel = selectedModel === '__custom__' ? customModel : selectedModel
 
     if (!effectiveModel) {
-      setErrorMsg('Masukkan nama model')
+      setErrorMsg(t('errEnterModel'))
       return
     }
-    if (provider !== 'anthropic' && !apiKey) {
-      setErrorMsg('Masukkan API key untuk provider ' + cfg.name)
+    if (!apiKey) {
+      setErrorMsg(t('errEnterApiKey', { provider: cfg.name }))
       return
     }
     if (provider === 'custom' && !baseUrl) {
-      setErrorMsg('Masukkan Base URL untuk custom provider')
+      setErrorMsg(t('errEnterBaseUrl'))
       return
     }
 
@@ -109,8 +113,7 @@ export default function App() {
     setWarnings([])
     setCurrentJSON('')
     setNodeTags([])
-    setStatusState('active')
-    setStatusText('Generating workflow...')
+    setStatus({ state: 'active', key: 'statusGenerating', params: {} })
 
     try {
       const prompt = buildPrompt({
@@ -144,10 +147,10 @@ export default function App() {
       const data = await res.json()
       let raw = cfg.extract(data)
       raw = cleanOutput(raw)
-      const parsed = repairJSON(raw)
+      const parsed = repairJSON(raw, t)
       const pretty = JSON.stringify(parsed, null, 2)
 
-      const resultWarnings = validateStructure(parsed)
+      const resultWarnings = validateStructure(parsed, t)
       setWarnings(resultWarnings)
       setCurrentJSON(pretty)
 
@@ -158,28 +161,26 @@ export default function App() {
       const wfNameOut = (parsed.name || 'workflow').replace(/\s+/g, '-').toLowerCase()
       setOutputFilename(wfNameOut + '.json')
 
-      if (resultWarnings.length > 0) {
-        setStatusState('done')
-        setStatusText('Selesai — ' + (parsed.nodes?.length || 0) + ' nodes (ada peringatan)')
-      } else {
-        setStatusState('done')
-        setStatusText('Selesai — ' + (parsed.nodes?.length || 0) + ' nodes')
-      }
+      const nodeCount = parsed.nodes?.length || 0
+      setStatus({
+        state: 'done',
+        key: resultWarnings.length > 0 ? 'statusDoneWarn' : 'statusDone',
+        params: { n: nodeCount }
+      })
 
     } catch(e) {
-      setErrorMsg('Gagal generate: ' + e.message)
-      setStatusState('error')
-      setStatusText('Error')
+      setErrorMsg(t('errGenerateFailed', { msg: e.message }))
+      setStatus({ state: 'error', key: 'statusError', params: {} })
     } finally {
       setIsGenerating(false)
     }
-  }, [description, wfName, n8nVersion, complexity, lang, provider, selectedModel, customModel, baseUrl, apiKey])
+  }, [description, wfName, n8nVersion, complexity, lang, provider, selectedModel, customModel, baseUrl, apiKey, t])
 
   const handleCopy = useCallback(() => {
     if (!currentJSON) return
     navigator.clipboard.writeText(currentJSON).then(() => {
-      setCopyBtnText('\u2713 Tersalin')
-      setTimeout(() => setCopyBtnText('Salin'), 2000)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
     })
   }, [currentJSON])
 
@@ -205,26 +206,26 @@ export default function App() {
       <main className="main">
         <div className="card">
           <div className="card-header">
-            <span className="card-title">Deskripsi workflow</span>
+            <span className="card-title">{t('descCardTitle')}</span>
           </div>
           <div className="card-body">
             <div>
-              <div className="field-label">Jelaskan workflow yang kamu mau</div>
+              <div className="field-label">{t('describeLabel')}</div>
               <textarea
                 id="desc"
                 rows="8"
                 maxLength={2000}
                 value={description}
                 onChange={(e) => { setDescription(e.target.value); setErrorMsg('') }}
-                placeholder="Contoh: Buat workflow yang menerima webhook, filter data berdasarkan status, lalu kirim notifikasi ke Slack dan simpan ke Google Sheets..."
+                placeholder={t('descPlaceholder')}
               />
-              <div className="char-count">{description.length} karakter</div>
+              <div className="char-count">{t('charCount', { n: description.length })}</div>
             </div>
 
             <div>
-              <div className="field-label">Contoh cepat</div>
+              <div className="field-label">{t('quickExamples')}</div>
               <div className="chips">
-                {Object.keys(EXAMPLES).map((key) => (
+                {Object.keys(examples).map((key) => (
                   <button key={key} className="chip" onClick={() => fillExample(key)}>
                     {key}
                   </button>
@@ -235,10 +236,10 @@ export default function App() {
             <div className="divider"></div>
 
             <div>
-              <div className="field-label">AI Provider</div>
+              <div className="field-label">{t('aiProvider')}</div>
               <div className="grid-2">
                 <div>
-                  <div className="field-label">Provider</div>
+                  <div className="field-label">{t('provider')}</div>
                   <select value={provider} onChange={handleProviderChange}>
                     <option value="anthropic">Anthropic (Claude)</option>
                     <option value="openai">OpenAI (GPT)</option>
@@ -248,7 +249,7 @@ export default function App() {
                   </select>
                 </div>
                 <div>
-                  <div className="field-label">Model</div>
+                  <div className="field-label">{t('model')}</div>
                   <select
                     value={selectedModel}
                     onChange={(e) => { setSelectedModel(e.target.value); setErrorMsg('') }}
@@ -257,18 +258,18 @@ export default function App() {
                     {modelOptions.map((m) => (
                       <option key={m} value={m}>{m}</option>
                     ))}
-                    <option value="__custom__">Custom / Other</option>
+                    <option value="__custom__">{t('customOther')}</option>
                   </select>
                 </div>
               </div>
               {showCustomModel && (
                 <div style={{marginTop:'10px'}}>
-                  <div className="field-label">Nama model</div>
-                  <input type="text" value={customModel} onChange={(e) => setCustomModel(e.target.value)} placeholder="gpt-4o / llama3 / dll" />
+                  <div className="field-label">{t('modelName')}</div>
+                  <input type="text" value={customModel} onChange={(e) => setCustomModel(e.target.value)} placeholder={t('modelNamePlaceholder')} />
                 </div>
               )}
               <div style={{marginTop:'10px'}}>
-                <div className="field-label">API Key <span style={{fontWeight:400, opacity:0.7}}>{'(wajib)'}</span></div>
+                <div className="field-label">{t('apiKey')} <span style={{fontWeight:400, opacity:0.7}}>{t('required')}</span></div>
                 <div className="password-wrap">
                   <input
                     type={showKey ? 'text' : 'password'}
@@ -283,27 +284,27 @@ export default function App() {
                 <div style={{marginTop:'6px'}}>
                   <label className="checkbox-label">
                     <input type="checkbox" checked={rememberKey} onChange={handleRememberChange} />
-                    Ingat API key di browser ini
+                    {t('rememberKey')}
                   </label>
                 </div>
                 <div className="security-notice">
-                  API key kamu tidak pernah dikirim ke server kami. Request langsung dari browser kamu ke provider AI.
+                  {t('securityDirect')}
                 </div>
                 {rememberKey && (
                   <div className="security-notice" style={{color:'#8D6E00'}}>
-                    Key disimpan di localStorage browser ini. Jangan gunakan di komputer publik atau shared device.
+                    {t('securityRemember')}
                   </div>
                 )}
               </div>
               {showBaseUrl && (
                 <div style={{marginTop:'10px'}}>
-                  <div className="field-label">Base URL <span style={{fontWeight:400,opacity:0.7}}>(tanpa /chat/completions)</span></div>
+                  <div className="field-label">{t('baseUrl')} <span style={{fontWeight:400,opacity:0.7}}>{t('baseUrlHint')}</span></div>
                   <input type="url" value={baseUrl} onChange={(e) => setBaseUrl(e.target.value)} placeholder="https://ai.sumopod.com/v1" />
                 </div>
               )}
               <div style={{marginTop:'10px'}}>
                 <div className="connection-badge">
-                  <span style={{fontSize:'8px'}}>&#9679;</span> Direct connection &mdash; {providerConfig.name}
+                  <span style={{fontSize:'8px'}}>&#9679;</span> {t('directConnection')} &mdash; {providerConfig.name}
                 </div>
               </div>
             </div>
@@ -311,39 +312,39 @@ export default function App() {
             <div className="divider"></div>
 
             <div>
-              <div className="field-label">Opsi</div>
+              <div className="field-label">{t('options')}</div>
               <div className="grid-2">
                 <div>
-                  <div className="field-label">Nama workflow</div>
+                  <div className="field-label">{t('wfName')}</div>
                   <input type="text" value={wfName} onChange={(e) => setWfName(e.target.value)} placeholder="My Workflow" />
                 </div>
                 <div>
-                  <div className="field-label">Versi n8n</div>
+                  <div className="field-label">{t('n8nVersion')}</div>
                   <select value={n8nVersion} onChange={(e) => setN8nVersion(e.target.value)}>
-                    <option value="1.x">1.x (terbaru)</option>
-                    <option value="0.x">0.x (lama)</option>
+                    <option value="1.x">{t('versionLatest')}</option>
+                    <option value="0.x">{t('versionLegacy')}</option>
                   </select>
                 </div>
                 <div>
-                  <div className="field-label">Kompleksitas</div>
+                  <div className="field-label">{t('complexity')}</div>
                   <select value={complexity} onChange={(e) => setComplexity(e.target.value)}>
-                    <option value="simple">Sederhana</option>
-                    <option value="medium">Menengah</option>
-                    <option value="complex">Lengkap + error handling</option>
+                    <option value="simple">{t('complexitySimple')}</option>
+                    <option value="medium">{t('complexityMedium')}</option>
+                    <option value="complex">{t('complexityComplex')}</option>
                   </select>
                 </div>
                 <div>
-                  <div className="field-label">Bahasa komentar</div>
+                  <div className="field-label">{t('commentLang')}</div>
                   <select value={lang} onChange={(e) => setLang(e.target.value)}>
-                    <option value="id">Indonesia</option>
-                    <option value="en">English</option>
+                    <option value="id">{t('optIndonesian')}</option>
+                    <option value="en">{t('optEnglish')}</option>
                   </select>
                 </div>
               </div>
             </div>
 
             <button className="btn-primary" onClick={handleGenerate} disabled={isGenerating}>
-              <span>{isGenerating ? 'Generating...' : 'Generate workflow JSON'}</span>
+              <span>{isGenerating ? t('generating') : t('generateBtn')}</span>
               <div className="spinner" style={{display: isGenerating ? 'block' : 'none'}}></div>
             </button>
 
@@ -355,7 +356,7 @@ export default function App() {
 
             {warnings.length > 0 && !errorMsg && (
               <div className="warning-msg">
-                <strong>&#9888; Perhatian:</strong> JSON mungkin perlu perbaikan manual sebelum di-import ke n8n.<br />
+                <strong>&#9888; {t('warningTitle')}</strong> {t('warningBody')}<br />
                 {warnings.map((w, i) => <span key={i}>&bull; {w}<br /></span>)}
               </div>
             )}
@@ -364,10 +365,10 @@ export default function App() {
 
         <div className="card output-card">
           <div className="card-header">
-            <span className="card-title">Output JSON</span>
+            <span className="card-title">{t('outputTitle')}</span>
             <div style={{display:'flex', gap:'6px'}}>
-              <button className="btn-sm" onClick={handleCopy} disabled={!currentJSON}>{copyBtnText}</button>
-              <button className="btn-sm btn-dl" onClick={handleDownload} disabled={!currentJSON}>&darr; Download</button>
+              <button className="btn-sm" onClick={handleCopy} disabled={!currentJSON}>{copied ? t('copied') : t('copy')}</button>
+              <button className="btn-sm btn-dl" onClick={handleDownload} disabled={!currentJSON}>&darr; {t('download')}</button>
             </div>
           </div>
           <div className="output-toolbar">
@@ -385,12 +386,12 @@ export default function App() {
           ) : (
             <div className="output-placeholder">
               <div className="placeholder-icon">{'{ }'}</div>
-              <div className="placeholder-text">JSON n8n akan muncul di sini setelah kamu generate workflow</div>
+              <div className="placeholder-text">{t('outputPlaceholder')}</div>
             </div>
           )}
           <div className="status-bar">
-            <div className={'status-dot' + (statusState ? ' ' + statusState : '')}></div>
-            <span>{statusText}</span>
+            <div className={'status-dot' + (status.state ? ' ' + status.state : '')}></div>
+            <span>{t(status.key, status.params)}</span>
           </div>
         </div>
       </main>
