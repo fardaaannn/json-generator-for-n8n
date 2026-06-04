@@ -57,7 +57,13 @@ export function cleanOutput(raw) {
   return raw.replace(/^```json\s*/i, '').replace(/^```\s*/i, '').replace(/```\s*$/i, '').trim();
 }
 
-export function repairJSON(raw) {
+const fallbackT = (key, params) => {
+  let str = key;
+  if (params) for (const p in params) str = str.replace(new RegExp('\\{' + p + '\\}', 'g'), String(params[p]));
+  return str;
+};
+
+export function repairJSON(raw, t = fallbackT) {
   try {
     return JSON.parse(raw);
   } catch(e) {
@@ -69,28 +75,29 @@ export function repairJSON(raw) {
       for(let i=0;i<opens;i++) fixed += ']';
       for(let i=0;i<openBraces;i++) fixed += '}';
       try { return JSON.parse(fixed); }
-      catch(e2) { throw new Error('JSON tidak valid. Coba sederhanakan deskripsi.'); }
+      catch(e2) { throw new Error(t('errJsonInvalid')); }
     }
-    throw new Error('JSON tidak valid. Coba sederhanakan deskripsi.');
+    throw new Error(t('errJsonInvalid'));
   }
 }
 
-export function validateStructure(parsed) {
+export function validateStructure(parsed, t = fallbackT) {
   const warnings = [];
   if (!Array.isArray(parsed.nodes)) {
-    warnings.push('"nodes" harus berupa array');
+    warnings.push(t('warnNodesArray'));
   } else {
     parsed.nodes.forEach((n, i) => {
-      if (!n.id) warnings.push('Node #' + (i+1) + ' (' + (n.name || 'unnamed') + ') tidak memiliki id');
-      if (!n.type) warnings.push('Node #' + (i+1) + ' (' + (n.name || 'unnamed') + ') tidak memiliki type');
-      if (!n.position) warnings.push('Node #' + (i+1) + ' (' + (n.name || 'unnamed') + ') tidak memiliki position');
+      const name = n.name || t('unnamed');
+      if (!n.id) warnings.push(t('warnNodeNoId', { n: i + 1, name }));
+      if (!n.type) warnings.push(t('warnNodeNoType', { n: i + 1, name }));
+      if (!n.position) warnings.push(t('warnNodeNoPos', { n: i + 1, name }));
     });
   }
   if (!parsed.connections || typeof parsed.connections !== 'object') {
-    warnings.push('"connections" harus berupa object');
+    warnings.push(t('warnConnections'));
   }
   if (typeof parsed.name !== 'string') {
-    warnings.push('"name" harus berupa string');
+    warnings.push(t('warnName'));
   }
   return warnings;
 }
