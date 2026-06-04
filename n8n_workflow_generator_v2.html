@@ -1,0 +1,674 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>n8n Workflow Generator</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+  :root {
+    --bg: #F5F4EE;
+    --surface: #FFFFFF;
+    --border: #E2E0D8;
+    --border-dark: #C9C7BE;
+    --text: #1A1A18;
+    --muted: #7A7870;
+    --green: #2D7A4F;
+    --green-bg: #EAF3DE;
+    --error: #A32D2D;
+    --error-bg: #FCEBEB;
+    --mono: 'JetBrains Mono', monospace;
+    --font: 'Inter', sans-serif;
+    --radius: 10px;
+    --radius-sm: 6px;
+  }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font);
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    font-size: 14px;
+  }
+  .header {
+    padding: 18px 40px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--bg);
+    position: sticky;
+    top: 0;
+    z-index: 10;
+  }
+  .header-brand {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .logo-mark {
+    width: 28px; height: 28px;
+    background: var(--text);
+    border-radius: 6px;
+    display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0;
+  }
+  .logo-mark svg { width: 14px; height: 14px; fill: white; }
+  .site-name { font-size: 15px; font-weight: 600; color: var(--text); letter-spacing: -0.2px; }
+  .hero {
+    padding: 72px 40px 56px;
+    text-align: center;
+    max-width: 680px;
+    margin: 0 auto;
+  }
+  .badge {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 5px 14px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 99px;
+    font-size: 12.5px; color: var(--muted);
+    margin-bottom: 28px;
+  }
+  .badge-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--green); }
+  .hero h1 {
+    font-size: clamp(32px, 5vw, 48px);
+    font-weight: 700; line-height: 1.1;
+    letter-spacing: -1.5px; color: var(--text);
+    margin-bottom: 18px;
+  }
+  .hero p {
+    font-size: 16px; color: var(--muted); line-height: 1.7;
+    max-width: 520px; margin: 0 auto 36px;
+  }
+  .main {
+    max-width: 960px; margin: 0 auto;
+    padding: 0 40px 80px; width: 100%;
+    display: grid; grid-template-columns: 1fr 1fr;
+    gap: 24px; align-items: start;
+  }
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    overflow: hidden;
+  }
+  .card-header {
+    padding: 16px 20px; border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: space-between;
+  }
+  .card-title { font-size: 13px; font-weight: 600; color: var(--text); letter-spacing: -0.1px; }
+  .card-body { padding: 20px; display: flex; flex-direction: column; gap: 18px; }
+  .field-label { font-size: 12px; font-weight: 500; color: var(--muted); margin-bottom: 6px; }
+  textarea, select, input[type="text"], input[type="password"] {
+    width: 100%; background: var(--bg);
+    border: 1px solid var(--border); border-radius: var(--radius-sm);
+    padding: 10px 13px; color: var(--text);
+    font-family: var(--font); font-size: 13px;
+    outline: none; transition: border-color 0.15s;
+  }
+  textarea { resize: none; line-height: 1.65; }
+  textarea:focus, select:focus, input:focus { border-color: var(--text); }
+  textarea::placeholder, input::placeholder { color: var(--muted); opacity: 0.7; }
+  select {
+    appearance: none; -webkit-appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%237A7870' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+    background-repeat: no-repeat; background-position: right 10px center; padding-right: 30px;
+  }
+  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; }
+  .chip {
+    padding: 4px 11px; background: transparent;
+    border: 1px solid var(--border); border-radius: 99px;
+    font-size: 12px; color: var(--muted); cursor: pointer;
+    transition: all 0.15s; font-family: var(--font); white-space: nowrap;
+  }
+  .chip:hover { border-color: var(--text); color: var(--text); }
+  .char-count { font-size: 11px; color: var(--muted); text-align: right; margin-top: -10px; }
+  .password-wrap { position: relative; }
+  .password-wrap input { padding-right: 38px; }
+  .eye-btn {
+    position: absolute; right: 10px; top: 50%; transform: translateY(-50%);
+    background: none; border: none; cursor: pointer;
+    color: var(--muted); font-size: 14px; padding: 2px; line-height: 1;
+  }
+  .btn-primary {
+    padding: 12px 18px; background: var(--text); color: white;
+    border: none; border-radius: 8px;
+    font-family: var(--font); font-size: 14px; font-weight: 500;
+    cursor: pointer; transition: background 0.15s;
+    display: flex; align-items: center; justify-content: center; gap: 6px;
+    width: 100%;
+  }
+  .btn-primary:hover:not(:disabled) { background: #333330; }
+  .btn-primary:disabled { opacity: 0.4; cursor: not-allowed; }
+  .output-card { position: sticky; top: 65px; }
+  .output-toolbar {
+    padding: 12px 16px; border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; gap: 8px; background: var(--bg);
+  }
+  .output-filename { font-size: 12px; color: var(--muted); font-family: var(--mono); flex: 1; }
+  .btn-sm {
+    padding: 5px 12px; background: transparent;
+    border: 1px solid var(--border); border-radius: var(--radius-sm);
+    color: var(--muted); font-family: var(--font); font-size: 12px;
+    cursor: pointer; transition: all 0.15s; white-space: nowrap;
+  }
+  .btn-sm:hover:not(:disabled) { border-color: var(--text); color: var(--text); }
+  .btn-sm:disabled { opacity: 0.3; cursor: not-allowed; }
+  .btn-dl { color: var(--green); border-color: #9FE1CB; }
+  .btn-dl:hover:not(:disabled) { background: var(--green-bg); border-color: var(--green); color: var(--green); }
+  .node-tags { display: flex; flex-wrap: wrap; gap: 5px; padding: 12px 16px; border-bottom: 1px solid var(--border); }
+  .node-tag { padding: 3px 9px; border-radius: 4px; font-size: 11px; font-weight: 500; font-family: var(--mono); }
+  .node-tag.trigger { background: #EEEDFE; color: #3C3489; }
+  .node-tag.action { background: var(--green-bg); color: var(--green); }
+  .node-tag.logic { background: #FAEEDA; color: #633806; }
+  .output-code {
+    padding: 16px; font-family: var(--mono); font-size: 11.5px;
+    line-height: 1.7; color: var(--muted);
+    overflow-y: auto; white-space: pre-wrap;
+    word-break: break-word; max-height: 420px;
+  }
+  .output-placeholder {
+    padding: 48px 24px; display: flex; flex-direction: column;
+    align-items: center; gap: 10px; color: var(--muted); text-align: center;
+  }
+  .placeholder-icon { font-size: 28px; opacity: 0.25; font-family: var(--mono); font-weight: 700; }
+  .placeholder-text { font-size: 13px; line-height: 1.6; max-width: 220px; }
+  .status-bar {
+    padding: 9px 16px; border-top: 1px solid var(--border);
+    font-size: 11.5px; color: var(--muted);
+    display: flex; align-items: center; gap: 7px; background: var(--bg);
+  }
+  .status-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--border-dark); flex-shrink: 0; }
+  .status-dot.active { background: #EF9F27; animation: pulse 1.2s ease-in-out infinite; }
+  .status-dot.done { background: var(--green); }
+  .status-dot.error { background: var(--error); }
+  @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
+  .spinner {
+    width: 14px; height: 14px;
+    border: 2px solid rgba(255,255,255,0.3); border-top-color: white;
+    border-radius: 50%; animation: spin 0.7s linear infinite; display: none;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .error-msg {
+    padding: 11px 14px; background: var(--error-bg);
+    border: 1px solid #F7C1C1; border-radius: var(--radius-sm);
+    color: var(--error); font-size: 13px; line-height: 1.5;
+  }
+  .divider { height: 1px; background: var(--border); margin: 2px 0; }
+  @media (max-width: 720px) {
+    .main { grid-template-columns: 1fr; padding: 0 20px 60px; }
+    .hero { padding: 48px 20px 36px; }
+    .header { padding: 14px 20px; }
+    .output-card { position: static; }
+  }
+</style>
+</head>
+<body>
+
+<header class="header">
+  <div class="header-brand">
+    <div class="logo-mark">
+      <svg viewBox="0 0 16 16"><path d="M2 2h5v5H2zM9 2h5v5H9zM2 9h5v5H2zM11.5 9v6M8.5 12h6"/></svg>
+    </div>
+    <span class="site-name">n8n Generator</span>
+  </div>
+</header>
+
+<section class="hero">
+  <div class="badge">
+    <span class="badge-dot"></span>
+    Generator workflow n8n berbasis AI
+  </div>
+  <h1>Buat workflow n8n<br>dari deskripsi teks</h1>
+  <p>Deskripsikan automasi yang kamu mau — AI akan generate JSON workflow n8n yang siap di-import, lengkap dengan nodes, connections, dan konfigurasi.</p>
+</section>
+
+<main class="main">
+  <div class="card">
+    <div class="card-header">
+      <span class="card-title">Deskripsi workflow</span>
+    </div>
+    <div class="card-body">
+      <div>
+        <div class="field-label">Jelaskan workflow yang kamu mau</div>
+        <textarea id="desc" rows="6" placeholder="Contoh: Buat workflow yang menerima webhook, filter data berdasarkan status, lalu kirim notifikasi ke Slack dan simpan ke Google Sheets..."></textarea>
+        <div class="char-count" id="char-count">0 karakter</div>
+      </div>
+
+      <div>
+        <div class="field-label">Contoh cepat</div>
+        <div class="chips">
+          <button class="chip" onclick="fillExample(this)">Webhook → Filter → Slack</button>
+          <button class="chip" onclick="fillExample(this)">Jadwal harian → API → Email</button>
+          <button class="chip" onclick="fillExample(this)">Form → simpan DB → Telegram</button>
+          <button class="chip" onclick="fillExample(this)">RSS feed → Discord</button>
+          <button class="chip" onclick="fillExample(this)">Rekber: transfer → notif WA</button>
+        </div>
+      </div>
+
+      <div class="divider"></div>
+
+      <div>
+        <div class="field-label">AI Provider</div>
+        <div class="grid-2">
+          <div>
+            <div class="field-label">Provider</div>
+            <select id="provider" onchange="updateProviderUI()">
+              <option value="anthropic">Anthropic (Claude)</option>
+              <option value="openai">OpenAI (GPT)</option>
+              <option value="groq">Groq</option>
+              <option value="openrouter">OpenRouter</option>
+              <option value="custom">Custom / OpenAI-compat</option>
+            </select>
+          </div>
+          <div>
+            <div class="field-label">Model</div>
+            <select id="model-select">
+              <option value="claude-sonnet-4-20250514">claude-sonnet-4-20250514</option>
+            </select>
+          </div>
+        </div>
+        <div id="custom-model-group" style="display:none; margin-top:10px">
+          <div class="field-label">Nama model</div>
+          <input type="text" id="custom-model" placeholder="gpt-4o / llama3 / dll">
+        </div>
+        <div style="margin-top:10px">
+          <div class="field-label">API Key <span id="key-hint" style="font-weight:400; opacity:0.7">(opsional untuk Claude)</span></div>
+          <div class="password-wrap">
+            <input type="password" id="api-key" placeholder="sk-...">
+            <button class="eye-btn" onclick="toggleKey()">👁</button>
+          </div>
+        </div>
+        <div id="custom-url-group" style="display:none; margin-top:10px">
+          <div class="field-label">Base URL <span style="font-weight:400;opacity:0.7">(tanpa /chat/completions)</span></div>
+          <input type="text" id="custom-url" placeholder="https://ai.sumopod.com/v1">
+        </div>
+      </div>
+
+      <div class="divider"></div>
+
+      <div>
+        <div class="field-label">Opsi</div>
+        <div class="grid-2">
+          <div>
+            <div class="field-label">Nama workflow</div>
+            <input type="text" id="wf-name" placeholder="My Workflow" value="My Workflow">
+          </div>
+          <div>
+            <div class="field-label">Versi n8n</div>
+            <select id="n8n-version">
+              <option value="1.x">1.x (terbaru)</option>
+              <option value="0.x">0.x (lama)</option>
+            </select>
+          </div>
+          <div>
+            <div class="field-label">Kompleksitas</div>
+            <select id="complexity">
+              <option value="simple">Sederhana</option>
+              <option value="medium" selected>Menengah</option>
+              <option value="complex">Lengkap + error handling</option>
+            </select>
+          </div>
+          <div>
+            <div class="field-label">Bahasa komentar</div>
+            <select id="lang">
+              <option value="id">Indonesia</option>
+              <option value="en">English</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <button class="btn-primary" id="btn-gen" onclick="generate()">
+        <span id="btn-text">Generate workflow JSON</span>
+        <div class="spinner" id="spinner"></div>
+      </button>
+
+      <div id="error-container"></div>
+    </div>
+  </div>
+
+  <div class="card output-card">
+    <div class="card-header">
+      <span class="card-title">Output JSON</span>
+      <div style="display:flex;gap:6px">
+        <button class="btn-sm" id="btn-copy" onclick="copyJSON()" disabled>Salin</button>
+        <button class="btn-sm btn-dl" id="btn-dl" onclick="downloadJSON()" disabled>↓ Download</button>
+      </div>
+    </div>
+    <div class="output-toolbar">
+      <span class="output-filename" id="output-filename">workflow.json</span>
+    </div>
+    <div id="node-tags" class="node-tags" style="display:none"></div>
+    <div id="output-placeholder" class="output-placeholder">
+      <div class="placeholder-icon">{ }</div>
+      <div class="placeholder-text">JSON n8n akan muncul di sini setelah kamu generate workflow</div>
+    </div>
+    <pre class="output-code" id="output-code" style="display:none"></pre>
+    <div class="status-bar">
+      <div class="status-dot" id="status-dot"></div>
+      <span id="status-text">Siap</span>
+    </div>
+  </div>
+</main>
+
+<script>
+const PROVIDERS = {
+  anthropic: {
+    name: 'Anthropic (Claude)',
+    url: 'https://api.anthropic.com/v1/messages',
+    models: ['claude-sonnet-4-20250514','claude-opus-4-20250514','claude-haiku-4-5-20251001'],
+    buildRequest(model, prompt, apiKey) {
+      return {
+        url: this.url,
+        headers: {
+          'Content-Type': 'application/json',
+          ...(apiKey ? {'x-api-key': apiKey} : {})
+        },
+        body: JSON.stringify({model, max_tokens: 8000, messages: [{role:'user', content: prompt}]})
+      };
+    },
+    extract(data) { return data.content.map(b => b.text || '').join(''); }
+  },
+  openai: {
+    name: 'OpenAI (GPT)',
+    url: 'https://api.openai.com/v1/chat/completions',
+    models: ['gpt-4o','gpt-4o-mini','gpt-4-turbo','gpt-3.5-turbo'],
+    buildRequest(model, prompt, apiKey) {
+      return {
+        url: this.url,
+        headers: {'Content-Type': 'application/json', 'Authorization': 'Bearer ' + apiKey},
+        body: JSON.stringify({model, max_tokens: 8000, messages: [{role:'user', content: prompt}]})
+      };
+    },
+    extract(data) { return data.choices[0].message.content; }
+  },
+  groq: {
+    name: 'Groq',
+    url: 'https://api.groq.com/openai/v1/chat/completions',
+    models: ['llama-3.3-70b-versatile','llama-3.1-8b-instant','mixtral-8x7b-32768'],
+    buildRequest(model, prompt, apiKey) {
+      return {
+        url: this.url,
+        headers: {'Content-Type': 'application/json', 'Authorization': 'Bearer ' + apiKey},
+        body: JSON.stringify({model, max_tokens: 8000, messages: [{role:'user', content: prompt}]})
+      };
+    },
+    extract(data) { return data.choices[0].message.content; }
+  },
+  openrouter: {
+    name: 'OpenRouter',
+    url: 'https://openrouter.ai/api/v1/chat/completions',
+    models: ['anthropic/claude-sonnet-4-5','openai/gpt-4o','google/gemini-2.0-flash-001','meta-llama/llama-3.3-70b-instruct'],
+    buildRequest(model, prompt, apiKey) {
+      return {
+        url: this.url,
+        headers: {'Content-Type': 'application/json', 'Authorization': 'Bearer ' + apiKey},
+        body: JSON.stringify({model, max_tokens: 8000, messages: [{role:'user', content: prompt}]})
+      };
+    },
+    extract(data) { return data.choices[0].message.content; }
+  },
+  custom: {
+    name: 'Custom',
+    url: '',
+    models: [],
+    buildRequest(model, prompt, apiKey, baseUrl) {
+      const cleanBase = (baseUrl || '').replace(/\/+$/, '');
+      const url = cleanBase + '/chat/completions';
+      return {
+        url,
+        headers: {
+          'Content-Type': 'application/json',
+          ...(apiKey ? {'Authorization': 'Bearer ' + apiKey} : {})
+        },
+        body: JSON.stringify({model, max_tokens: 8000, messages: [{role:'user', content: prompt}]})
+      };
+    },
+    extract(data) {
+      return data.choices?.[0]?.message?.content
+        || data.content?.[0]?.text
+        || JSON.stringify(data);
+    }
+  }
+};
+
+function updateProviderUI() {
+  const p = document.getElementById('provider').value;
+  const cfg = PROVIDERS[p];
+  const modelSel = document.getElementById('model-select');
+  modelSel.innerHTML = '';
+  if (cfg.models.length > 0) {
+    cfg.models.forEach(m => {
+      const opt = document.createElement('option');
+      opt.value = m; opt.textContent = m;
+      modelSel.appendChild(opt);
+    });
+    modelSel.disabled = false;
+    document.getElementById('custom-model-group').style.display = 'none';
+  } else {
+    const opt = document.createElement('option');
+    opt.value = ''; opt.textContent = '— ketik di bawah —';
+    modelSel.appendChild(opt);
+    modelSel.disabled = true;
+    document.getElementById('custom-model-group').style.display = 'block';
+  }
+  document.getElementById('key-hint').textContent = p === 'anthropic' ? '(opsional untuk Claude)' : '(wajib)';
+  document.getElementById('custom-url-group').style.display = p === 'custom' ? 'block' : 'none';
+}
+
+function toggleKey() {
+  const inp = document.getElementById('api-key');
+  inp.type = inp.type === 'password' ? 'text' : 'password';
+}
+
+let currentJSON = '';
+
+document.getElementById('desc').addEventListener('input', function() {
+  document.getElementById('char-count').textContent = this.value.length + ' karakter';
+});
+
+const EXAMPLES = {
+  'Webhook → Filter → Slack': 'Buat workflow dengan trigger Webhook. Terima data JSON, filter hanya data dengan field "status" bernilai "active", lalu kirim pesan ke channel Slack #notifications dengan format: "New item: {name} - {status}"',
+  'Jadwal harian → API → Email': 'Buat workflow yang berjalan setiap hari pukul 08:00. Ambil data dari REST API, ekstrak field "summary" dan "total", lalu kirim email ke admin@company.com dengan subject "Daily Report".',
+  'Form → simpan DB → Telegram': 'Buat workflow dengan trigger Webhook untuk form submission. Simpan data ke PostgreSQL (tabel "submissions"), lalu kirim notifikasi ke Telegram: "Form baru dari {name}: {email}"',
+  'RSS feed → Discord': 'Cek RSS feed setiap 30 menit. Filter artikel yang mengandung keyword "AI" atau "machine learning", lalu post ke Discord dengan embed berisi judul, link, dan deskripsi.',
+  'Rekber: transfer → notif WA': 'Workflow rekber. Webhook menerima notifikasi transfer dari payment gateway. Update status di database, kirim notifikasi WhatsApp ke pembeli dan penjual via Fonnte.'
+};
+
+function fillExample(btn) {
+  const desc = document.getElementById('desc');
+  desc.value = EXAMPLES[btn.textContent] || btn.textContent;
+  document.getElementById('char-count').textContent = desc.value.length + ' karakter';
+  desc.focus();
+}
+
+function setStatus(state, text) {
+  const dot = document.getElementById('status-dot');
+  dot.className = 'status-dot ' + (state || '');
+  document.getElementById('status-text').textContent = text;
+}
+
+async function generate() {
+  const description = document.getElementById('desc').value.trim();
+  if (!description) { showError('Masukkan deskripsi workflow dulu ya!'); return; }
+
+  const name = document.getElementById('wf-name').value || 'My Workflow';
+  const version = document.getElementById('n8n-version').value;
+  const complexity = document.getElementById('complexity').value;
+  const lang = document.getElementById('lang').value;
+
+  const complexityDesc = {
+    simple: 'Buat workflow sederhana dengan node minimal.',
+    medium: 'Buat workflow lengkap dengan konfigurasi parameter yang realistis.',
+    complex: 'Buat workflow lengkap dengan error handling, IF node untuk kondisi, dan sticky note penjelasan.'
+  };
+
+  const prompt = `Kamu adalah expert n8n workflow builder. Generate file JSON workflow n8n yang valid dan siap di-import.
+
+DESKRIPSI WORKFLOW:
+${description}
+
+REQUIREMENTS:
+- Nama workflow: "${name}"
+- Versi n8n: ${version}
+- ${complexityDesc[complexity]}
+- Komentar/notes dalam bahasa: ${lang === 'id' ? 'Indonesia' : 'English'}
+- Gunakan node types yang valid untuk n8n ${version}
+- Setiap node harus memiliki id unik, nama deskriptif, type yang benar, dan posisi (x,y)
+- Buat connections yang benar antar node
+
+FORMAT OUTPUT:
+Langsung output JSON valid saja, tanpa penjelasan, tanpa markdown code block, tanpa backtick.
+JSON harus dimulai dengan { dan diakhiri dengan }.
+Maksimal 12 nodes.
+
+Struktur:
+{"name":"...","nodes":[...],"connections":{...},"active":false,"settings":{},"id":"..."}`;
+
+  const btn = document.getElementById('btn-gen');
+  const spinner = document.getElementById('spinner');
+  const btnText = document.getElementById('btn-text');
+
+  btn.disabled = true;
+  spinner.style.display = 'block';
+  btnText.textContent = 'Generating...';
+  setStatus('active', 'Generating workflow...');
+  document.getElementById('error-container').innerHTML = '';
+  document.getElementById('output-placeholder').style.display = 'flex';
+  document.getElementById('output-code').style.display = 'none';
+  document.getElementById('node-tags').style.display = 'none';
+  document.getElementById('btn-copy').disabled = true;
+  document.getElementById('btn-dl').disabled = true;
+
+  const provider = document.getElementById('provider').value;
+  const cfg = PROVIDERS[provider];
+  const apiKey = document.getElementById('api-key').value.trim();
+  const customModel = document.getElementById('custom-model').value.trim();
+  const model = customModel || document.getElementById('model-select').value;
+  const baseUrl = document.getElementById('custom-url').value.trim();
+
+  if (provider !== 'anthropic' && !apiKey) {
+    showError('Masukkan API key untuk provider ' + cfg.name);
+    btn.disabled = false; spinner.style.display = 'none';
+    btnText.textContent = 'Generate workflow JSON';
+    return;
+  }
+  if (provider === 'custom' && !baseUrl) {
+    showError('Masukkan Base URL untuk custom provider');
+    btn.disabled = false; spinner.style.display = 'none';
+    btnText.textContent = 'Generate workflow JSON';
+    return;
+  }
+
+  try {
+    const req = cfg.buildRequest(model, prompt, apiKey, baseUrl);
+
+    const res = await fetch(req.url, {
+      method: 'POST',
+      headers: req.headers,
+      body: req.body
+    });
+
+    if (!res.ok) {
+      let errMsg = 'HTTP ' + res.status;
+      try {
+        const errData = await res.json();
+        errMsg = errData.error?.message || errData.message || errData.detail || errMsg;
+      } catch(e) {
+        try { errMsg = (await res.text()).slice(0, 200) || errMsg; } catch(e2) {}
+      }
+      throw new Error(errMsg + ' (' + res.status + ')');
+    }
+
+    const data = await res.json();
+    let raw = cfg.extract(data);
+    raw = raw.replace(/^```json\s*/i, '').replace(/^```\s*/i, '').replace(/```\s*$/i, '').trim();
+
+    let parsed;
+    try {
+      parsed = JSON.parse(raw);
+    } catch(e) {
+      const lastBrace = raw.lastIndexOf('}');
+      if (lastBrace > 0) {
+        let fixed = raw.substring(0, lastBrace + 1);
+        const opens = (fixed.match(/\[/g)||[]).length - (fixed.match(/\]/g)||[]).length;
+        const openBraces = (fixed.match(/\{/g)||[]).length - (fixed.match(/\}/g)||[]).length;
+        for(let i=0;i<opens;i++) fixed += ']';
+        for(let i=0;i<openBraces;i++) fixed += '}';
+        try { parsed = JSON.parse(fixed); }
+        catch(e2) { throw new Error('JSON tidak valid. Coba sederhanakan deskripsi.'); }
+      } else { throw e; }
+    }
+
+    currentJSON = JSON.stringify(parsed, null, 2);
+    document.getElementById('output-placeholder').style.display = 'none';
+    const codeEl = document.getElementById('output-code');
+    codeEl.textContent = currentJSON;
+    codeEl.style.display = 'block';
+
+    if (parsed.nodes && parsed.nodes.length > 0) {
+      const tagsEl = document.getElementById('node-tags');
+      tagsEl.innerHTML = '';
+      parsed.nodes.forEach(n => {
+        const tag = document.createElement('span');
+        tag.className = 'node-tag ' + getNodeClass(n.type);
+        tag.textContent = n.name || n.type;
+        tagsEl.appendChild(tag);
+      });
+      tagsEl.style.display = 'flex';
+    }
+
+    const wfName = (parsed.name || 'workflow').replace(/\s+/g, '-').toLowerCase();
+    document.getElementById('output-filename').textContent = wfName + '.json';
+    document.getElementById('btn-copy').disabled = false;
+    document.getElementById('btn-dl').disabled = false;
+    setStatus('done', 'Selesai — ' + (parsed.nodes?.length || 0) + ' nodes');
+
+  } catch(e) {
+    showError('Gagal generate: ' + e.message);
+    setStatus('error', 'Error');
+  } finally {
+    btn.disabled = false;
+    spinner.style.display = 'none';
+    btnText.textContent = 'Generate workflow JSON';
+  }
+}
+
+function getNodeClass(type) {
+  if (!type) return 'action';
+  const t = type.toLowerCase();
+  if (t.includes('trigger') || t.includes('webhook') || t.includes('cron') || t.includes('schedule')) return 'trigger';
+  if (t.includes('if') || t.includes('switch') || t.includes('merge') || t.includes('split')) return 'logic';
+  return 'action';
+}
+
+function copyJSON() {
+  if (!currentJSON) return;
+  navigator.clipboard.writeText(currentJSON).then(() => {
+    const btn = document.getElementById('btn-copy');
+    btn.textContent = '✓ Tersalin';
+    setTimeout(() => btn.textContent = 'Salin', 2000);
+  });
+}
+
+function downloadJSON() {
+  if (!currentJSON) return;
+  const filename = document.getElementById('output-filename').textContent;
+  const blob = new Blob([currentJSON], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = filename; a.click();
+  URL.revokeObjectURL(url);
+}
+
+function showError(msg) {
+  document.getElementById('error-container').innerHTML = '<div class="error-msg">⚠ ' + msg + '</div>';
+}
+</script>
+</body>
+</html>
