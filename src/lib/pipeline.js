@@ -1,3 +1,5 @@
+import { isLikelyUnknownNodeType } from './n8nNodes.js';
+
 const MAX_DESC = 2000;
 const REQUEST_TIMEOUT_MS = 90000;
 
@@ -188,6 +190,10 @@ export function validateStructure(parsed, t = fallbackT) {
       } else if (!/\./.test(n.type)) {
         // n8n node types look like "n8n-nodes-base.webhook"
         warnings.push(t('warnNodeTypeFormat', { n: i + 1, name, type: n.type }));
+      } else if (isLikelyUnknownNodeType(n.type)) {
+        // well-formed but not in the known n8n-nodes-base catalog → likely
+        // hallucinated or mistyped. Non-blocking, so we just flag it.
+        warnings.push(t('warnNodeTypeUnknown', { n: i + 1, name, type: n.type }));
       }
       if (!n.position) warnings.push(t('warnNodeNoPos', { n: i + 1, name }));
       if (n.parameters === undefined) warnings.push(t('warnNodeNoParams', { n: i + 1, name }));
