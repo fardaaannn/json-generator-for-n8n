@@ -212,3 +212,87 @@ export function validateStructure(parsed, t = fallbackT) {
 
   return warnings;
 }
+
+
+/**
+ * OPTIONAL — Tier 2: import a generated workflow directly into the user's own
+ * n8n instance via the n8n Public REST API (POST /api/v1/workflows).
+ *
+ * This runs entirely client-side: the request goes straight from the browser
+ * to the user's n8n instance, so the n8n API key never touches our servers
+ * (same privacy model as the AI providers). Because of that, it only works when
+ * the n8n instance allows this app's origin via CORS (N8N_CORS_ALLOW_ORIGIN)
+ * and is reachable over a compatible protocol (an HTTPS page cannot call an
+ * HTTP/localhost instance due to mixed-content blocking). When it can't work,
+ * the user can always fall back to Copy / Download + manual import.
+ *
+ * @param {{baseUrl: string, apiKey: string, workflow: object}} args
+ * @returns {Promise<{id: (string|undefined), raw: object}>}
+ */
+export async function importToN8n({ baseUrl, apiKey, workflow }, t = fallbackT, { timeout = REQUEST_TIMEOUT_MS } = {}) {
+  const cleanBase = (baseUrl || '').trim().replace(/\/+$/, '');
+  if (!cleanBase) throw new Error(t('errN8nNoUrl'));
+  if (!apiKey) throw new Error(t('errN8nNoKey'));
+  if (!workflow || typeof workflow !== 'object') throw new Error(t('errN8nNoWorkflow'));
+
+  // The create-workflow endpoint has a strict schema and only accepts
+  // name, nodes, connections, and settings. Extra or read-only keys such as
+  // active, id, tags, or pinData trigger 400 errors, so we send a minimal,
+  // sanitized payload built from the generated workflow.
+  const payload = {
+    name: (typeof workflow.name === 'string' && workflow.name.trim()) ? workflow.name : 'My Workflow',
+    nodes: Array.isArray(workflow.nodes) ? workflow.nodes : [],
+    connections: (workflow.connections && typeof workflow.connections === 'object' && !Array.isArray(workflow.connections)) ? workflow.connections : {},
+    settings: (workflow.settings && typeof workflow.settings === 'object' && !Array.isArray(workflow.settings)) ? workflow.settings : {},
+  };
+
+  const url = cleanBase + '/api/v1/workflows';
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeout);
+  let res;
+  try {
+    res = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-N8N-API-KEY': apiKey,
+      },
+      body: JSON.stringify(payload),
+      signal: controller.signal,
+    });
+  } catch (err) {
+    clearTimeout(timer);
+    if (err && err.name === 'AbortError') {
+      throw new Error(t('errTimeout', { s: Math.round(timeout / 1000) }));
+    }
+    // Browsers surface CORS / connection failures as a generic TypeError
+    // ("Failed to fetch") with no status, so we give CORS-focused guidance.
+    throw new Error(t('errN8nNetwork'));
+  }
+  clearTimeout(timer);
+
+  if (!res.ok) {
+    let detail = 'HTTP ' + res.status;
+    try {
+      const data = await res.json();
+      if (Array.isArray(data.errors) && data.errors.length) {
+        detail = data.errors.map(e => e.message || e).join('; ');
+      } else {
+        detail = data.message || data.error || detail;
+      }
+    } catch (e) {
+      try { detail = (await res.text()).slice(0, 200) || detail; } catch (e2) { /* ignore */ }
+    }
+    if (res.status === 401 || res.status === 403) {
+      throw new Error(t('errN8nAuth'));
+    }
+    if (res.status === 400) {
+      throw new Error(t('errN8nBadRequest', { msg: detail }));
+    }
+    throw new Error(t('errN8nFailed', { msg: detail }));
+  }
+
+  const data = await res.json().catch(() => ({}));
+  const id = data.id || data.data?.id;
+  return { id, raw: data };
+}

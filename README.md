@@ -25,6 +25,7 @@ Generate workflow n8n JSON dari deskripsi teks menggunakan AI — langsung dari 
 - **Kustomisasi**: Nama workflow, versi n8n (1.x / 0.x), bahasa komentar (ID/EN)
 - **Direct connection**: API key tetap di browser, tidak dikirim ke server manapun
 - **Copy & Download**: Salin JSON ke clipboard atau unduh file `.json`
+- **Import langsung ke n8n (opsional)**: Kirim workflow ke instance n8n kamu via REST API, langsung dari browser
 - **Validasi struktur JSON**: Peringatan otomatis jika ada node/tag/connection yang tidak valid
 - **Input sanitization**: Proteksi dasar prompt injection sebelum dikirim ke AI
 
@@ -55,6 +56,30 @@ Hasil build di folder `dist/` — bisa dibuka langsung atau dihosting ke static 
 4. Klik **Generate workflow JSON**
 5. Copy atau download hasil JSON
 6. Import file `.json` ke n8n
+7. _(Opsional)_ Atau gunakan **Import langsung ke n8n** untuk mengirim workflow ke instance n8n kamu tanpa download — lihat bagian di bawah
+
+## Import langsung ke n8n (Opsional)
+
+> **Fitur ini sepenuhnya opsional.** Cara utama tetap Copy/Download lalu import manual. Fitur ini hanya mempercepat langkah tersebut untuk pengguna n8n self-hosted.
+
+Setelah generate, buka panel **"Import langsung ke n8n"** di kartu Output, lalu isi:
+
+- **n8n Base URL** — alamat instance kamu, tanpa `/api/v1` (mis. `https://n8n.example.com`)
+- **n8n API Key** — buat di n8n: **Settings → n8n API → Create an API key**
+
+Klik **Import ke n8n**. Workflow akan dibuat lewat endpoint `POST /api/v1/workflows`, dan kalau berhasil kamu dapat tautan untuk membukanya langsung di n8n.
+
+### Cara kerja & privasi
+
+- Request berjalan **langsung dari browser ke instance n8n kamu** — API key n8n **tidak** melewati server kami (sama seperti API key AI).
+- Payload yang dikirim hanya `name`, `nodes`, `connections`, dan `settings` (field read-only seperti `active`/`id` dibuang agar tidak ditolak n8n).
+
+### Batasan (penting)
+
+- **Hanya untuk n8n self-hosted** yang mengizinkan origin situs ini lewat env `N8N_CORS_ALLOW_ORIGIN`. Tanpa itu, browser akan memblokir request karena CORS.
+- **Mixed content**: halaman HTTPS tidak bisa memanggil n8n di `http://` atau `localhost`.
+- Untuk **n8n Cloud**, fitur ini umumnya tidak berfungsi karena keterbatasan CORS — gunakan Copy/Download.
+- Kalau gagal karena alasan apa pun, **fallback ke Copy/Download** selalu tersedia.
 
 ## Provider & API Key
 
@@ -69,6 +94,7 @@ Hasil build di folder `dist/` — bisa dibuka langsung atau dihosting ke static 
 ## Keamanan
 
 - API key **tidak pernah** dikirim ke server kami — request langsung dari browser ke API provider AI
+- Begitu juga **n8n API key** pada fitur import opsional — request langsung dari browser ke instance n8n kamu
 - Opsi "Ingat API key" menyimpan key di `localStorage` browser (jangan aktifkan di komputer publik)
 - Input didahului sanitasi untuk mencegah prompt injection
 
@@ -98,5 +124,5 @@ Hasil build di folder `dist/` — bisa dibuka langsung atau dihosting ke static 
 │       ├── providers.js    # Definisi 5 AI provider
 │       ├── examples.js     # Template contoh cepat
 │       ├── getNodeClass.js # Klasifikasi node n8n
-│       └── pipeline.js     # 5-layer pipeline (sanitize → prompt → clean → repair → validate)
+│       └── pipeline.js     # 5-layer pipeline (sanitize → prompt → clean → repair → validate) + import opsional ke n8n
 └── n8n_workflow_generator_v2.html  # Referensi versi lama (CDN-only)
