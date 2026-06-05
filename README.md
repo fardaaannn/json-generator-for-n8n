@@ -1,5 +1,7 @@
 # n8n Workflow Generator
 
+**Bahasa Indonesia** · [English](README.en.md)
+
 Generate workflow n8n JSON dari deskripsi teks menggunakan AI — langsung dari browser, tanpa backend.
 
 ## Tampilan
