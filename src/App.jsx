@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { PROVIDERS } from './lib/providers'
 import { EXAMPLES } from './lib/examples'
-import { sanitizeInput, buildPrompt, cleanOutput, repairJSON, validateStructure, sendRequest, importToN8n } from './lib/pipeline'
+import { sanitizeInput, buildPrompt, cleanOutput, repairJSON, validateStructure, sendRequest, importToN8n, SYSTEM_PROMPT } from './lib/pipeline'
 import { getNodeClass } from './lib/getNodeClass'
 import { useLanguage } from './lib/i18n'
 import Header from './components/Header'
@@ -206,7 +206,7 @@ export default function App() {
       })
 
       const baseUrlValue = provider === 'custom' ? baseUrl : undefined
-      const req = cfg.buildRequest(effectiveModel, prompt, apiKey, baseUrlValue)
+      const req = cfg.buildRequest(effectiveModel, prompt, apiKey, baseUrlValue, SYSTEM_PROMPT)
 
       const data = await sendRequest(req, t)
       let raw = cfg.extract(data)

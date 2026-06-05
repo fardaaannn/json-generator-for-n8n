@@ -33,6 +33,14 @@ export function sanitizeInput(desc) {
   return cleaned;
 }
 
+/**
+ * Concise system instruction sent in the dedicated system role/param. Keeping
+ * the "JSON only" contract here (instead of only in the user prompt) lets us
+ * pair it with each provider's structured-output mode for a much higher rate
+ * of valid JSON. The word "JSON" must appear for OpenAI's json_object mode.
+ */
+export const SYSTEM_PROMPT = 'You are an expert n8n workflow builder. Respond with ONLY a single valid JSON object describing an n8n workflow — no markdown, no code fences, no commentary. The response must start with { and end with }.';
+
 export function buildPrompt({description, name, version, complexity, lang}) {
   const complexityDesc = {
     simple: 'Buat workflow sederhana dengan node minimal.',
