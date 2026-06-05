@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { PROVIDERS } from './lib/providers'
 import { EXAMPLES } from './lib/examples'
 import { sanitizeInput, buildPrompt, cleanOutput, repairJSON, validateStructure, sendRequest, importToN8n, SYSTEM_PROMPT, buildRefinePrompt } from './lib/pipeline'
+import { fetchModels } from './lib/modelCatalog'
 import { getNodeClass } from './lib/getNodeClass'
 import { useLanguage } from './lib/i18n'
 import Header from './components/Header'
@@ -28,6 +29,12 @@ export default function App() {
   const [selectedModel, setSelectedModel] = useState(initialModels.length > 0 ? initialModels[0] : '__custom__')
   const [customModel, setCustomModel] = useState('')
   const [baseUrl, setBaseUrl] = useState('')
+
+  // Dynamically fetched model catalog for the current provider (falls back to
+  // the provider's hardcoded list). See lib/modelCatalog.js.
+  const [models, setModels] = useState(initialModels)
+  const [modelsLoading, setModelsLoading] = useState(false)
+  const [modelsError, setModelsError] = useState(false)
 
   const [apiKey, setApiKey] = useState('')
   const [rememberKey, setRememberKey] = useState(false)
@@ -107,13 +114,68 @@ export default function App() {
     }
   }, [apiKey])
 
+  // Load the live model catalog for the current provider. Debounced on apiKey
+  // so typing/pasting a key doesn't fire a request per keystroke. Always keeps
+  // the provider's hardcoded list as a fallback.
+  useEffect(() => {
+    let cancelled = false
+    const cfg = PROVIDERS[provider]
+    const fallback = cfg.models
+
+    // Custom / OpenAI-compatible: the user types the model name manually.
+    if (provider === 'custom') {
+      setModelsLoading(false); setModelsError(false)
+      return
+    }
+    // No live source, or a key is required but not entered yet → built-in list.
+    if (!cfg.modelsUrl || (cfg.requiresKeyForModels && !apiKey)) {
+      setModels(fallback); setModelsLoading(false); setModelsError(false)
+      return
+    }
+
+    setModelsLoading(true); setModelsError(false)
+    const timer = setTimeout(() => {
+      fetchModels(provider, { apiKey })
+        .then((list) => {
+          if (cancelled) return
+          const next = (list && list.length) ? list : fallback
+          setModels(next)
+          setSelectedModel((prev) => (prev === '__custom__' || next.includes(prev)) ? prev : (next[0] || '__custom__'))
+        })
+        .catch(() => { if (!cancelled) { setModels(fallback); setModelsError(true) } })
+        .finally(() => { if (!cancelled) setModelsLoading(false) })
+    }, 500)
+
+    return () => { cancelled = true; clearTimeout(timer) }
+  }, [provider, apiKey])
+
+  const refreshModels = useCallback(() => {
+    const cfg = PROVIDERS[provider]
+    if (provider === 'custom' || !cfg.modelsUrl) return
+    if (cfg.requiresKeyForModels && !apiKey) return
+    const fallback = cfg.models
+    setModelsLoading(true); setModelsError(false)
+    fetchModels(provider, { apiKey, force: true })
+      .then((list) => {
+        const next = (list && list.length) ? list : fallback
+        setModels(next)
+        setSelectedModel((prev) => (prev === '__custom__' || next.includes(prev)) ? prev : (next[0] || '__custom__'))
+      })
+      .catch(() => { setModels(fallback); setModelsError(true) })
+      .finally(() => setModelsLoading(false))
+  }, [provider, apiKey])
+
   const handleProviderChange = useCallback((e) => {
     const newProvider = e.target.value
     setProvider(newProvider)
     setErrorMsg('')
-    const models = PROVIDERS[newProvider].models
-    if (models.length > 0) {
-      setSelectedModel(models[0])
+    setModelsError(false)
+    const providerModels = PROVIDERS[newProvider].models
+    // Show this provider's built-in list immediately; the effect above then
+    // refines it with the live catalog.
+    setModels(newProvider === 'custom' ? [] : providerModels)
+    if (providerModels.length > 0 && newProvider !== 'custom') {
+      setSelectedModel(providerModels[0])
       setCustomModel('')
     } else {
       setSelectedModel('__custom__')
@@ -387,9 +449,11 @@ export default function App() {
   }, [currentJSON, outputFilename])
 
   const providerConfig = PROVIDERS[provider]
-  const modelOptions = providerConfig.models
+  const modelOptions = models
   const showCustomModel = provider === 'custom' || selectedModel === '__custom__'
   const showBaseUrl = provider === 'custom'
+  const needsKeyForModels = provider !== 'custom' && !!providerConfig.modelsUrl && providerConfig.requiresKeyForModels && !apiKey
+  const canRefreshModels = provider !== 'custom' && !!providerConfig.modelsUrl && !(providerConfig.requiresKeyForModels && !apiKey)
 
   return (
     <>
@@ -442,7 +506,24 @@ export default function App() {
                   </select>
                 </div>
                 <div>
-                  <label className="field-label" htmlFor="model">{t('model')}</label>
+                  <label className="field-label field-label-row" htmlFor="model">
+                    <span>
+                      {t('model')}
+                      {modelsLoading && <span className="model-hint"> · {t('modelsLoading')}</span>}
+                    </span>
+                    {canRefreshModels && (
+                      <button
+                        type="button"
+                        className="model-refresh"
+                        onClick={refreshModels}
+                        disabled={modelsLoading}
+                        aria-label={t('modelsRefresh')}
+                        title={t('modelsRefresh')}
+                      >
+                        &#8635;
+                      </button>
+                    )}
+                  </label>
                   <select
                     id="model"
                     value={selectedModel}
@@ -454,6 +535,8 @@ export default function App() {
                     ))}
                     <option value="__custom__">{t('customOther')}</option>
                   </select>
+                  {needsKeyForModels && <p className="model-note">{t('modelsEnterKey')}</p>}
+                  {modelsError && <p className="model-note">{t('modelsFetchError')}</p>}
                 </div>
               </div>
               {showCustomModel && (
