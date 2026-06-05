@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { PROVIDERS } from './lib/providers'
 import { EXAMPLES } from './lib/examples'
-import { sanitizeInput, buildPrompt, cleanOutput, repairJSON, validateStructure, sendRequest, importToN8n, SYSTEM_PROMPT } from './lib/pipeline'
+import { sanitizeInput, buildPrompt, cleanOutput, repairJSON, validateStructure, sendRequest, importToN8n, SYSTEM_PROMPT, buildRefinePrompt } from './lib/pipeline'
 import { getNodeClass } from './lib/getNodeClass'
 import { useLanguage } from './lib/i18n'
 import Header from './components/Header'
@@ -40,6 +40,8 @@ export default function App() {
   const [isGenerating, setIsGenerating] = useState(false)
   const [copied, setCopied] = useState(false)
   const [outputView, setOutputView] = useState('json')
+  const [refineInstruction, setRefineInstruction] = useState('')
+  const [isRefining, setIsRefining] = useState(false)
 
   // Optional Tier 2: direct import to a user's own n8n instance
   const [showN8nImport, setShowN8nImport] = useState(false)
@@ -243,6 +245,72 @@ export default function App() {
       setIsGenerating(false)
     }
   }, [description, wfName, n8nVersion, complexity, lang, provider, selectedModel, customModel, baseUrl, apiKey, t])
+
+  const handleRefine = useCallback(async () => {
+    const instruction = sanitizeInput(refineInstruction)
+    if (!instruction) {
+      setErrorMsg(t('errEnterRefine'))
+      return
+    }
+    if (!workflowObj || !currentJSON) {
+      setErrorMsg(t('errN8nNoWorkflow'))
+      return
+    }
+
+    const cfg = PROVIDERS[provider]
+    const effectiveModel = selectedModel === '__custom__' ? customModel : selectedModel
+    if (!effectiveModel) { setErrorMsg(t('errEnterModel')); return }
+    if (!apiKey) { setErrorMsg(t('errEnterApiKey', { provider: cfg.name })); return }
+    if (provider === 'custom' && !baseUrl) { setErrorMsg(t('errEnterBaseUrl')); return }
+
+    setIsRefining(true)
+    setErrorMsg('')
+    setWarnings([])
+    setWasRepaired(false)
+    setN8nResult(null)
+    setN8nError('')
+    setStatus({ state: 'active', key: 'statusGenerating', params: {} })
+
+    try {
+      const prompt = buildRefinePrompt({ currentJSON, instruction, version: n8nVersion, lang })
+      const baseUrlValue = provider === 'custom' ? baseUrl : undefined
+      const req = cfg.buildRequest(effectiveModel, prompt, apiKey, baseUrlValue, SYSTEM_PROMPT)
+
+      const data = await sendRequest(req, t)
+      let raw = cfg.extract(data)
+      raw = cleanOutput(raw)
+      const { value: parsed, repaired } = repairJSON(raw, t)
+      const pretty = JSON.stringify(parsed, null, 2)
+
+      setWasRepaired(repaired)
+      const resultWarnings = validateStructure(parsed, t)
+      setWarnings(resultWarnings)
+      setCurrentJSON(pretty)
+      setWorkflowObj(parsed)
+
+      if (parsed.nodes && parsed.nodes.length > 0) {
+        setNodeTags(parsed.nodes.map(n => ({ name: n.name || n.type, type: n.type })))
+      } else {
+        setNodeTags([])
+      }
+
+      const wfNameOut = (parsed.name || 'workflow').replace(/\s+/g, '-').toLowerCase()
+      setOutputFilename(wfNameOut + '.json')
+
+      const nodeCount = parsed.nodes?.length || 0
+      setStatus({
+        state: 'done',
+        key: (resultWarnings.length > 0 || repaired) ? 'statusDoneWarn' : 'statusDone',
+        params: { n: nodeCount }
+      })
+      setRefineInstruction('')
+    } catch (e) {
+      setErrorMsg(t('errGenerateFailed', { msg: e.message }))
+      setStatus({ state: 'error', key: 'statusError', params: {} })
+    } finally {
+      setIsRefining(false)
+    }
+  }, [refineInstruction, currentJSON, workflowObj, n8nVersion, lang, provider, selectedModel, customModel, baseUrl, apiKey, t])
 
   const handleCopy = useCallback(() => {
     if (!currentJSON) return
@@ -496,6 +564,32 @@ export default function App() {
             <div className={'status-dot' + (status.state ? ' ' + status.state : '')} aria-hidden="true"></div>
             <span>{t(status.key, status.params)}</span>
           </div>
+
+          {currentJSON && (
+            <div className="refine">
+              <label className="field-label" htmlFor="refine">{t('refineLabel')}</label>
+              <div className="refine-row">
+                <input
+                  id="refine"
+                  type="text"
+                  value={refineInstruction}
+                  onChange={(e) => setRefineInstruction(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === 'Enter' && !isRefining && refineInstruction.trim()) handleRefine() }}
+                  placeholder={t('refinePlaceholder')}
+                  disabled={isRefining}
+                />
+                <button
+                  type="button"
+                  className="btn-sm refine-btn"
+                  onClick={handleRefine}
+                  disabled={isRefining || !refineInstruction.trim()}
+                  aria-busy={isRefining}
+                >
+                  {isRefining ? t('refining') : t('refineBtn')}
+                </button>
+              </div>
+            </div>
+          )}
 
           <div className="n8n-import">
             <button
