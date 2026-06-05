@@ -88,7 +88,7 @@ export const translations = {
     showKey: 'Tampilkan API key',
     hideKey: 'Sembunyikan API key',
     // footer
-    footerMessage: 'Dibuat oleh Fardan dan Claude. Kamu ada saran, kritik atau masukan? Boleh banget hubungi kami lewat kontak di bawah yaa. Semangat bikin workflownya!!',
+    footerMessage: 'Dibuat oleh Fardan dan Claude. Kamu ada saran, kritik atau masukan? Boleh banget hubungi kami lewat kontak di bawah yaa. Semangat bikin workflow-nya!!',
     footerSource: 'Repo Github',
     footerDisclaimer: 'Proyek independen, tidak terafiliasi dengan n8n.',
     footerFollow: 'Ikuti saya',
@@ -186,7 +186,7 @@ export const translations = {
     hideKey: 'Hide API key',
     // footer
     footerMessage: 'Made by Fardan and Claude. Got any suggestions, critiques, or feedback? Feel free to reach out via the contacts below. Happy workflow building!!',
-    footerSource: 'Repo Github',
+    footerSource: 'Github Repo',
     footerDisclaimer: 'An independent project, not affiliated with n8n.',
     footerFollow: 'Follow me',
     // references
