@@ -10,12 +10,16 @@ import References from './components/References'
 import Footer from './components/Footer'
 import WorkflowPreview from './components/WorkflowPreview'
 
+// n8n major version targeted by generated workflows. The user-facing version
+// dropdown was removed (0.x is long obsolete); workflows now always target the
+// current 1.x line. Kept as a single constant so prompts stay consistent.
+const N8N_VERSION = '1.x'
+
 export default function App() {
   const { t, lang: uiLang } = useLanguage()
 
   const [description, setDescription] = useState('')
-  const [wfName, setWfName] = useState('My Workflow')
-  const [n8nVersion, setN8nVersion] = useState('1.x')
+  const [wfName, setWfName] = useState('')
   const [complexity, setComplexity] = useState('medium')
   const [lang, setLang] = useState(uiLang)
 
@@ -255,7 +259,7 @@ export default function App() {
       const prompt = buildPrompt({
         description: cleaned,
         name: wfName || 'My Workflow',
-        version: n8nVersion,
+        version: N8N_VERSION,
         complexity,
         lang
       })
@@ -296,7 +300,7 @@ export default function App() {
     } finally {
       setIsGenerating(false)
     }
-  }, [description, wfName, n8nVersion, complexity, lang, provider, selectedModel, customModel, baseUrl, apiKey, t, pushHistory])
+  }, [description, wfName, complexity, lang, provider, selectedModel, customModel, baseUrl, apiKey, t, pushHistory])
 
   const handleRefine = useCallback(async () => {
     const instruction = sanitizeInput(refineInstruction)
@@ -324,7 +328,7 @@ export default function App() {
     setStatus({ state: 'active', key: 'statusGenerating', params: {} })
 
     try {
-      const prompt = buildRefinePrompt({ currentJSON, instruction, version: n8nVersion, lang })
+      const prompt = buildRefinePrompt({ currentJSON, instruction, version: N8N_VERSION, lang })
       const baseUrlValue = provider === 'custom' ? baseUrl : undefined
       const req = cfg.buildRequest(effectiveModel, prompt, apiKey, baseUrlValue, SYSTEM_PROMPT)
 
@@ -363,7 +367,7 @@ export default function App() {
     } finally {
       setIsRefining(false)
     }
-  }, [refineInstruction, currentJSON, workflowObj, n8nVersion, lang, provider, selectedModel, customModel, baseUrl, apiKey, t, pushHistory])
+  }, [refineInstruction, currentJSON, workflowObj, lang, provider, selectedModel, customModel, baseUrl, apiKey, t, pushHistory])
 
   const handleCopy = useCallback(() => {
     if (!currentJSON) return
@@ -513,16 +517,9 @@ export default function App() {
             <fieldset className="field-group">
               <legend className="field-label">{t('options')}</legend>
               <div className="grid-2">
-                <div>
+                <div style={{ gridColumn: '1 / -1' }}>
                   <label className="field-label" htmlFor="wfName">{t('wfName')}</label>
                   <input id="wfName" type="text" value={wfName} onChange={(e) => setWfName(e.target.value)} placeholder="My Workflow" />
-                </div>
-                <div>
-                  <label className="field-label" htmlFor="n8nVersion">{t('n8nVersion')}</label>
-                  <select id="n8nVersion" value={n8nVersion} onChange={(e) => setN8nVersion(e.target.value)}>
-                    <option value="1.x">{t('versionLatest')}</option>
-                    <option value="0.x">{t('versionLegacy')}</option>
-                  </select>
                 </div>
                 <div>
                   <label className="field-label" htmlFor="complexity">{t('complexity')}</label>

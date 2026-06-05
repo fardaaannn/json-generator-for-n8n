@@ -35,9 +35,6 @@ export const translations = {
     // Options
     options: 'Opsi',
     wfName: 'Nama workflow',
-    n8nVersion: 'Versi n8n',
-    versionLatest: '1.x (terbaru)',
-    versionLegacy: '0.x (lama)',
     complexity: 'Kompleksitas',
     complexitySimple: 'Sederhana',
     complexityMedium: 'Menengah',
@@ -166,9 +163,6 @@ export const translations = {
     // Options
     options: 'Options',
     wfName: 'Workflow name',
-    n8nVersion: 'n8n version',
-    versionLatest: '1.x (latest)',
-    versionLegacy: '0.x (legacy)',
     complexity: 'Complexity',
     complexitySimple: 'Simple',
     complexityMedium: 'Medium',
