@@ -1,13 +1,14 @@
 import { useState, useEffect, useCallback } from 'react'
 import { PROVIDERS } from './lib/providers'
 import { EXAMPLES } from './lib/examples'
-import { sanitizeInput, buildPrompt, cleanOutput, repairJSON, validateStructure, sendRequest, importToN8n } from './lib/pipeline'
+import { sanitizeInput, buildPrompt, cleanOutput, repairJSON, validateStructure, sendRequest, importToN8n, SYSTEM_PROMPT, buildRefinePrompt } from './lib/pipeline'
 import { getNodeClass } from './lib/getNodeClass'
 import { useLanguage } from './lib/i18n'
 import Header from './components/Header'
 import Hero from './components/Hero'
 import References from './components/References'
 import Footer from './components/Footer'
+import WorkflowPreview from './components/WorkflowPreview'
 
 export default function App() {
   const { t, lang: uiLang } = useLanguage()
@@ -38,6 +39,11 @@ export default function App() {
   const [wasRepaired, setWasRepaired] = useState(false)
   const [isGenerating, setIsGenerating] = useState(false)
   const [copied, setCopied] = useState(false)
+  const [outputView, setOutputView] = useState('json')
+  const [refineInstruction, setRefineInstruction] = useState('')
+  const [isRefining, setIsRefining] = useState(false)
+  const [history, setHistory] = useState([])
+  const [showHistory, setShowHistory] = useState(false)
 
   // Optional Tier 2: direct import to a user's own n8n instance
   const [showN8nImport, setShowN8nImport] = useState(false)
@@ -56,6 +62,16 @@ export default function App() {
       setApiKey(storedKey)
       setRememberKey(true)
     }
+  }, [])
+
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem('n8n_gen_history')
+      if (raw) {
+        const parsed = JSON.parse(raw)
+        if (Array.isArray(parsed)) setHistory(parsed.slice(0, 10))
+      }
+    } catch (e) { /* ignore corrupted history */ }
   }, [])
 
   useEffect(() => {
@@ -162,6 +178,45 @@ export default function App() {
     setErrorMsg('')
   }, [examples])
 
+  const pushHistory = useCallback((parsed, pretty) => {
+    const entry = {
+      id: Date.now() + '-' + Math.random().toString(36).slice(2, 7),
+      name: (parsed && typeof parsed.name === 'string' && parsed.name) ? parsed.name : 'workflow',
+      nodeCount: Array.isArray(parsed?.nodes) ? parsed.nodes.length : 0,
+      ts: Date.now(),
+      json: pretty,
+    }
+    setHistory((prev) => {
+      const next = [entry, ...prev].slice(0, 10)
+      try { localStorage.setItem('n8n_gen_history', JSON.stringify(next)) } catch (e) { /* quota */ }
+      return next
+    })
+  }, [])
+
+  const restoreHistory = useCallback((entry) => {
+    try {
+      const parsed = JSON.parse(entry.json)
+      setCurrentJSON(entry.json)
+      setWorkflowObj(parsed)
+      setNodeTags(Array.isArray(parsed.nodes) ? parsed.nodes.map(n => ({ name: n.name || n.type, type: n.type })) : [])
+      const wfNameOut = (parsed.name || 'workflow').replace(/\s+/g, '-').toLowerCase()
+      setOutputFilename(wfNameOut + '.json')
+      setWarnings([])
+      setWasRepaired(false)
+      setN8nResult(null)
+      setN8nError('')
+      setErrorMsg('')
+      setStatus({ state: 'done', key: 'statusDone', params: { n: Array.isArray(parsed.nodes) ? parsed.nodes.length : 0 } })
+    } catch (e) {
+      setErrorMsg(t('errGenerateFailed', { msg: e.message }))
+    }
+  }, [t])
+
+  const clearHistory = useCallback(() => {
+    setHistory([])
+    try { localStorage.removeItem('n8n_gen_history') } catch (e) { /* ignore */ }
+  }, [])
+
   const handleGenerate = useCallback(async () => {
     const cleaned = sanitizeInput(description)
     if (!cleaned) {
@@ -206,7 +261,7 @@ export default function App() {
       })
 
       const baseUrlValue = provider === 'custom' ? baseUrl : undefined
-      const req = cfg.buildRequest(effectiveModel, prompt, apiKey, baseUrlValue)
+      const req = cfg.buildRequest(effectiveModel, prompt, apiKey, baseUrlValue, SYSTEM_PROMPT)
 
       const data = await sendRequest(req, t)
       let raw = cfg.extract(data)
@@ -233,6 +288,7 @@ export default function App() {
         key: (resultWarnings.length > 0 || repaired) ? 'statusDoneWarn' : 'statusDone',
         params: { n: nodeCount }
       })
+      pushHistory(parsed, pretty)
 
     } catch(e) {
       setErrorMsg(t('errGenerateFailed', { msg: e.message }))
@@ -240,7 +296,74 @@ export default function App() {
     } finally {
       setIsGenerating(false)
     }
-  }, [description, wfName, n8nVersion, complexity, lang, provider, selectedModel, customModel, baseUrl, apiKey, t])
+  }, [description, wfName, n8nVersion, complexity, lang, provider, selectedModel, customModel, baseUrl, apiKey, t, pushHistory])
+
+  const handleRefine = useCallback(async () => {
+    const instruction = sanitizeInput(refineInstruction)
+    if (!instruction) {
+      setErrorMsg(t('errEnterRefine'))
+      return
+    }
+    if (!workflowObj || !currentJSON) {
+      setErrorMsg(t('errN8nNoWorkflow'))
+      return
+    }
+
+    const cfg = PROVIDERS[provider]
+    const effectiveModel = selectedModel === '__custom__' ? customModel : selectedModel
+    if (!effectiveModel) { setErrorMsg(t('errEnterModel')); return }
+    if (!apiKey) { setErrorMsg(t('errEnterApiKey', { provider: cfg.name })); return }
+    if (provider === 'custom' && !baseUrl) { setErrorMsg(t('errEnterBaseUrl')); return }
+
+    setIsRefining(true)
+    setErrorMsg('')
+    setWarnings([])
+    setWasRepaired(false)
+    setN8nResult(null)
+    setN8nError('')
+    setStatus({ state: 'active', key: 'statusGenerating', params: {} })
+
+    try {
+      const prompt = buildRefinePrompt({ currentJSON, instruction, version: n8nVersion, lang })
+      const baseUrlValue = provider === 'custom' ? baseUrl : undefined
+      const req = cfg.buildRequest(effectiveModel, prompt, apiKey, baseUrlValue, SYSTEM_PROMPT)
+
+      const data = await sendRequest(req, t)
+      let raw = cfg.extract(data)
+      raw = cleanOutput(raw)
+      const { value: parsed, repaired } = repairJSON(raw, t)
+      const pretty = JSON.stringify(parsed, null, 2)
+
+      setWasRepaired(repaired)
+      const resultWarnings = validateStructure(parsed, t)
+      setWarnings(resultWarnings)
+      setCurrentJSON(pretty)
+      setWorkflowObj(parsed)
+
+      if (parsed.nodes && parsed.nodes.length > 0) {
+        setNodeTags(parsed.nodes.map(n => ({ name: n.name || n.type, type: n.type })))
+      } else {
+        setNodeTags([])
+      }
+
+      const wfNameOut = (parsed.name || 'workflow').replace(/\s+/g, '-').toLowerCase()
+      setOutputFilename(wfNameOut + '.json')
+
+      const nodeCount = parsed.nodes?.length || 0
+      setStatus({
+        state: 'done',
+        key: (resultWarnings.length > 0 || repaired) ? 'statusDoneWarn' : 'statusDone',
+        params: { n: nodeCount }
+      })
+      pushHistory(parsed, pretty)
+      setRefineInstruction('')
+    } catch (e) {
+      setErrorMsg(t('errGenerateFailed', { msg: e.message }))
+      setStatus({ state: 'error', key: 'statusError', params: {} })
+    } finally {
+      setIsRefining(false)
+    }
+  }, [refineInstruction, currentJSON, workflowObj, n8nVersion, lang, provider, selectedModel, customModel, baseUrl, apiKey, t, pushHistory])
 
   const handleCopy = useCallback(() => {
     if (!currentJSON) return
@@ -450,6 +573,26 @@ export default function App() {
           </div>
           <div className="output-toolbar">
             <span className="output-filename">{outputFilename}</span>
+            {currentJSON && (
+              <div className="output-view-toggle" role="group" aria-label={t('viewToggle')}>
+                <button
+                  type="button"
+                  className={'view-btn' + (outputView === 'json' ? ' active' : '')}
+                  onClick={() => setOutputView('json')}
+                  aria-pressed={outputView === 'json'}
+                >
+                  {t('viewJson')}
+                </button>
+                <button
+                  type="button"
+                  className={'view-btn' + (outputView === 'preview' ? ' active' : '')}
+                  onClick={() => setOutputView('preview')}
+                  aria-pressed={outputView === 'preview'}
+                >
+                  {t('viewPreview')}
+                </button>
+              </div>
+            )}
           </div>
           {nodeTags.length > 0 && (
             <div className="node-tags">
@@ -459,7 +602,11 @@ export default function App() {
             </div>
           )}
           {currentJSON ? (
-            <pre className="output-code" tabIndex={0} aria-label={t('outputTitle')}>{currentJSON}</pre>
+            outputView === 'preview' ? (
+              <WorkflowPreview workflow={workflowObj} t={t} />
+            ) : (
+              <pre className="output-code" tabIndex={0} aria-label={t('outputTitle')}>{currentJSON}</pre>
+            )
           ) : (
             <div className="output-placeholder">
               <div className="placeholder-icon" aria-hidden="true">{'{ }'}</div>
@@ -470,6 +617,32 @@ export default function App() {
             <div className={'status-dot' + (status.state ? ' ' + status.state : '')} aria-hidden="true"></div>
             <span>{t(status.key, status.params)}</span>
           </div>
+
+          {currentJSON && (
+            <div className="refine">
+              <label className="field-label" htmlFor="refine">{t('refineLabel')}</label>
+              <div className="refine-row">
+                <input
+                  id="refine"
+                  type="text"
+                  value={refineInstruction}
+                  onChange={(e) => setRefineInstruction(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === 'Enter' && !isRefining && refineInstruction.trim()) handleRefine() }}
+                  placeholder={t('refinePlaceholder')}
+                  disabled={isRefining}
+                />
+                <button
+                  type="button"
+                  className="btn-sm refine-btn"
+                  onClick={handleRefine}
+                  disabled={isRefining || !refineInstruction.trim()}
+                  aria-busy={isRefining}
+                >
+                  {isRefining ? t('refining') : t('refineBtn')}
+                </button>
+              </div>
+            </div>
+          )}
 
           <div className="n8n-import">
             <button
@@ -548,6 +721,32 @@ export default function App() {
               </div>
             )}
           </div>
+
+          {history.length > 0 && (
+            <div className="history">
+              <button
+                type="button"
+                className="n8n-import-toggle"
+                onClick={() => setShowHistory((v) => !v)}
+                aria-expanded={showHistory}
+                aria-controls="history-body"
+              >
+                <span>{t('historyTitle')} <span className="optional-tag">{history.length}</span></span>
+                <span className="n8n-import-chevron" aria-hidden="true">{showHistory ? '\u2212' : '+'}</span>
+              </button>
+              {showHistory && (
+                <div className="history-body" id="history-body">
+                  {history.map((h) => (
+                    <button key={h.id} type="button" className="history-item" onClick={() => restoreHistory(h)}>
+                      <span className="history-item-name">{h.name}</span>
+                      <span className="history-item-meta">{t('historyNodes', { n: h.nodeCount })}</span>
+                    </button>
+                  ))}
+                  <button type="button" className="btn-sm history-clear" onClick={clearHistory}>{t('historyClear')}</button>
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </main>
 
