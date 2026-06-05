@@ -42,6 +42,8 @@ export default function App() {
   const [outputView, setOutputView] = useState('json')
   const [refineInstruction, setRefineInstruction] = useState('')
   const [isRefining, setIsRefining] = useState(false)
+  const [history, setHistory] = useState([])
+  const [showHistory, setShowHistory] = useState(false)
 
   // Optional Tier 2: direct import to a user's own n8n instance
   const [showN8nImport, setShowN8nImport] = useState(false)
@@ -60,6 +62,16 @@ export default function App() {
       setApiKey(storedKey)
       setRememberKey(true)
     }
+  }, [])
+
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem('n8n_gen_history')
+      if (raw) {
+        const parsed = JSON.parse(raw)
+        if (Array.isArray(parsed)) setHistory(parsed.slice(0, 10))
+      }
+    } catch (e) { /* ignore corrupted history */ }
   }, [])
 
   useEffect(() => {
@@ -166,6 +178,45 @@ export default function App() {
     setErrorMsg('')
   }, [examples])
 
+  const pushHistory = useCallback((parsed, pretty) => {
+    const entry = {
+      id: Date.now() + '-' + Math.random().toString(36).slice(2, 7),
+      name: (parsed && typeof parsed.name === 'string' && parsed.name) ? parsed.name : 'workflow',
+      nodeCount: Array.isArray(parsed?.nodes) ? parsed.nodes.length : 0,
+      ts: Date.now(),
+      json: pretty,
+    }
+    setHistory((prev) => {
+      const next = [entry, ...prev].slice(0, 10)
+      try { localStorage.setItem('n8n_gen_history', JSON.stringify(next)) } catch (e) { /* quota */ }
+      return next
+    })
+  }, [])
+
+  const restoreHistory = useCallback((entry) => {
+    try {
+      const parsed = JSON.parse(entry.json)
+      setCurrentJSON(entry.json)
+      setWorkflowObj(parsed)
+      setNodeTags(Array.isArray(parsed.nodes) ? parsed.nodes.map(n => ({ name: n.name || n.type, type: n.type })) : [])
+      const wfNameOut = (parsed.name || 'workflow').replace(/\s+/g, '-').toLowerCase()
+      setOutputFilename(wfNameOut + '.json')
+      setWarnings([])
+      setWasRepaired(false)
+      setN8nResult(null)
+      setN8nError('')
+      setErrorMsg('')
+      setStatus({ state: 'done', key: 'statusDone', params: { n: Array.isArray(parsed.nodes) ? parsed.nodes.length : 0 } })
+    } catch (e) {
+      setErrorMsg(t('errGenerateFailed', { msg: e.message }))
+    }
+  }, [t])
+
+  const clearHistory = useCallback(() => {
+    setHistory([])
+    try { localStorage.removeItem('n8n_gen_history') } catch (e) { /* ignore */ }
+  }, [])
+
   const handleGenerate = useCallback(async () => {
     const cleaned = sanitizeInput(description)
     if (!cleaned) {
@@ -237,6 +288,7 @@ export default function App() {
         key: (resultWarnings.length > 0 || repaired) ? 'statusDoneWarn' : 'statusDone',
         params: { n: nodeCount }
       })
+      pushHistory(parsed, pretty)
 
     } catch(e) {
       setErrorMsg(t('errGenerateFailed', { msg: e.message }))
@@ -244,7 +296,7 @@ export default function App() {
     } finally {
       setIsGenerating(false)
     }
-  }, [description, wfName, n8nVersion, complexity, lang, provider, selectedModel, customModel, baseUrl, apiKey, t])
+  }, [description, wfName, n8nVersion, complexity, lang, provider, selectedModel, customModel, baseUrl, apiKey, t, pushHistory])
 
   const handleRefine = useCallback(async () => {
     const instruction = sanitizeInput(refineInstruction)
@@ -303,6 +355,7 @@ export default function App() {
         key: (resultWarnings.length > 0 || repaired) ? 'statusDoneWarn' : 'statusDone',
         params: { n: nodeCount }
       })
+      pushHistory(parsed, pretty)
       setRefineInstruction('')
     } catch (e) {
       setErrorMsg(t('errGenerateFailed', { msg: e.message }))
@@ -310,7 +363,7 @@ export default function App() {
     } finally {
       setIsRefining(false)
     }
-  }, [refineInstruction, currentJSON, workflowObj, n8nVersion, lang, provider, selectedModel, customModel, baseUrl, apiKey, t])
+  }, [refineInstruction, currentJSON, workflowObj, n8nVersion, lang, provider, selectedModel, customModel, baseUrl, apiKey, t, pushHistory])
 
   const handleCopy = useCallback(() => {
     if (!currentJSON) return
@@ -668,6 +721,32 @@ export default function App() {
               </div>
             )}
           </div>
+
+          {history.length > 0 && (
+            <div className="history">
+              <button
+                type="button"
+                className="n8n-import-toggle"
+                onClick={() => setShowHistory((v) => !v)}
+                aria-expanded={showHistory}
+                aria-controls="history-body"
+              >
+                <span>{t('historyTitle')} <span className="optional-tag">{history.length}</span></span>
+                <span className="n8n-import-chevron" aria-hidden="true">{showHistory ? '\u2212' : '+'}</span>
+              </button>
+              {showHistory && (
+                <div className="history-body" id="history-body">
+                  {history.map((h) => (
+                    <button key={h.id} type="button" className="history-item" onClick={() => restoreHistory(h)}>
+                      <span className="history-item-name">{h.name}</span>
+                      <span className="history-item-meta">{t('historyNodes', { n: h.nodeCount })}</span>
+                    </button>
+                  ))}
+                  <button type="button" className="btn-sm history-clear" onClick={clearHistory}>{t('historyClear')}</button>
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </main>
 

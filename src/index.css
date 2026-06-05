@@ -313,8 +313,7 @@ select {
 }
 .success-msg a { color: var(--green); font-weight: 600; }
 
-/* Refine (conversational edit) */
-.refine {
+/* Refine (conversational edit) */.refine {
   padding: 12px 16px; border-top: 1px solid var(--border); background: var(--bg);
 }
 .refine-row { display: flex; gap: 8px; align-items: center; }
@@ -468,3 +467,22 @@ textarea:focus-visible, select:focus-visible, input:focus-visible {
   .site-name { font-size: 14px; }
   .hero h1 { letter-spacing: -1px; }
 }
+
+
+/* Generation history */
+.history { border-top: 1px solid var(--border); }
+.history-body { padding: 4px 12px 12px; display: flex; flex-direction: column; gap: 6px; border-top: 1px solid var(--border); }
+.history-item {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  padding: 8px 10px; background: var(--bg);
+  border: 1px solid var(--border); border-radius: var(--radius-sm);
+  cursor: pointer; text-align: left; transition: border-color 0.15s;
+  font-family: var(--font);
+}
+.history-item:hover { border-color: var(--text); }
+.history-item-name {
+  font-size: 12.5px; font-weight: 500; color: var(--text);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.history-item-meta { font-size: 11px; color: var(--muted); font-family: var(--mono); flex-shrink: 0; }
+.history-clear { align-self: flex-start; margin-top: 2px; }

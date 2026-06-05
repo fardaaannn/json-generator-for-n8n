@@ -62,6 +62,9 @@ export const translations = {
     refinePlaceholder: 'Contoh: tambahkan node Slack setelah filter, atau ganti trigger jadi schedule',
     refineBtn: 'Refine',
     refining: 'Memproses...',
+    historyTitle: 'Riwayat generasi',
+    historyNodes: '{n} nodes',
+    historyClear: 'Hapus riwayat',
     // Status
     statusReady: 'Siap',
     statusGenerating: 'Membuat workflow...',
@@ -190,6 +193,9 @@ export const translations = {
     refinePlaceholder: 'e.g. add a Slack node after the filter, or change the trigger to schedule',
     refineBtn: 'Refine',
     refining: 'Working...',
+    historyTitle: 'Generation history',
+    historyNodes: '{n} nodes',
+    historyClear: 'Clear history',
     // Status
     statusReady: 'Ready',
     statusGenerating: 'Generating workflow...',
