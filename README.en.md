@@ -27,8 +27,12 @@ Generate n8n workflow JSON from a text description using AI — straight from th
 - **Customization**: Workflow name, n8n version (1.x / 0.x), comment language (ID/EN)
 - **Direct connection**: API key stays in the browser, never sent to any server
 - **Copy & Download**: Copy the JSON to the clipboard or download a `.json` file
+- **Visual preview**: See nodes & connections as a diagram, not just JSON text (JSON/Preview toggle)
+- **Refine**: Tweak the workflow with a follow-up instruction (e.g. "add a Slack node") without starting over
+- **Generation history**: The last 10 results are stored in the browser and can be reopened
 - **Direct import to n8n (optional)**: Send the workflow to your own n8n instance via the REST API, straight from the browser
-- **JSON structure validation**: Automatic warnings when a node/tag/connection is invalid
+- **Structured JSON output**: Uses providers' JSON mode (OpenAI/Groq/OpenRouter) + a system prompt for more reliable JSON
+- **JSON structure validation**: Automatic warnings for invalid nodes/tags/connections or unknown node types
 - **Input sanitization**: Basic prompt-injection protection before sending to the AI
 
 ## Getting Started

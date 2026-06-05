@@ -27,8 +27,12 @@ Generate workflow n8n JSON dari deskripsi teks menggunakan AI — langsung dari 
 - **Kustomisasi**: Nama workflow, versi n8n (1.x / 0.x), bahasa komentar (ID/EN)
 - **Direct connection**: API key tetap di browser, tidak dikirim ke server manapun
 - **Copy & Download**: Salin JSON ke clipboard atau unduh file `.json`
+- **Preview visual**: Lihat node & koneksi sebagai diagram, bukan cuma teks JSON (toggle JSON/Preview)
+- **Refine**: Ubah workflow lewat perintah lanjutan (mis. "tambah node Slack") tanpa mulai dari nol
+- **Riwayat generasi**: 10 hasil terakhir tersimpan di browser dan bisa dibuka kembali
 - **Import langsung ke n8n (opsional)**: Kirim workflow ke instance n8n kamu via REST API, langsung dari browser
-- **Validasi struktur JSON**: Peringatan otomatis jika ada node/tag/connection yang tidak valid
+- **Output JSON terstruktur**: Memakai JSON mode provider (OpenAI/Groq/OpenRouter) + system prompt agar hasil JSON lebih andal
+- **Validasi struktur JSON**: Peringatan otomatis jika ada node/tag/connection tidak valid atau node type tidak dikenal
 - **Input sanitization**: Proteksi dasar prompt injection sebelum dikirim ke AI
 
 ## Cara Pakai
