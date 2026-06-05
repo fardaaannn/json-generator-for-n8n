@@ -164,7 +164,7 @@ body {
 }
 .card-title { font-size: 13px; font-weight: 600; color: var(--text); letter-spacing: -0.1px; }
 .card-body { padding: 20px; display: flex; flex-direction: column; gap: 18px; }
-.field-label { font-size: 12px; font-weight: 500; color: var(--muted); margin-bottom: 6px; }
+.field-label { font-size: 12px; font-weight: 500; color: var(--muted); margin-bottom: 10px; }
 textarea, select, input[type="text"], input[type="password"], input[type="url"] {
   width: 100%; background: var(--bg);
   border: 1px solid var(--border); border-radius: var(--radius-sm);
@@ -192,7 +192,7 @@ select {
   transition: all 0.15s; font-family: var(--font); white-space: nowrap;
 }
 .chip:hover { border-color: var(--text); color: var(--text); }
-.char-count { font-size: 11px; color: var(--muted); text-align: right; margin-top: -10px; }
+.char-count { font-size: 11px; color: var(--muted); text-align: right; margin-top: 8px; }
 .password-wrap { position: relative; }
 .password-wrap input { padding-right: 38px; }
 .eye-btn {
