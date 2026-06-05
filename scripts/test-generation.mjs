@@ -7,6 +7,7 @@
  * Prompt sangat pendek + output dibatasi kecil agar biaya minimal.
  */
 import { PROVIDERS } from '../src/lib/providers.js';
+import { SYSTEM_PROMPT } from '../src/lib/pipeline.js';
 
 const PROMPT = 'Reply with exactly one word: OK';
 
@@ -42,7 +43,7 @@ async function main() {
       console.log(`- ${p.name.padEnd(24)} : DILEWATI (CUSTOM_API_KEY/CUSTOM_BASE_URL kosong)`);
       continue;
     }
-    const req = p.buildRequest(t.model, PROMPT, t.key, t.base);
+    const req = p.buildRequest(t.model, PROMPT, t.key, t.base, SYSTEM_PROMPT);
     process.stdout.write(`- ${(p.name + ' [' + t.model + ']').padEnd(46)} : `);
     try {
       const res = await fetch(req.url, { method: 'POST', headers: req.headers, body: patchedBody(req.body) });
