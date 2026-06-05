@@ -53,6 +53,11 @@ export const translations = {
     copied: '\u2713 Tersalin',
     download: 'Download',
     outputPlaceholder: 'JSON n8n akan muncul di sini setelah kamu generate workflow',
+    viewToggle: 'Tampilan output',
+    viewJson: 'JSON',
+    viewPreview: 'Preview',
+    previewEmpty: 'Tidak ada node untuk ditampilkan',
+    previewAria: 'Diagram workflow',
     // Status
     statusReady: 'Siap',
     statusGenerating: 'Membuat workflow...',
@@ -170,6 +175,11 @@ export const translations = {
     copied: '\u2713 Copied',
     download: 'Download',
     outputPlaceholder: 'Your n8n JSON will appear here after you generate a workflow',
+    viewToggle: 'Output view',
+    viewJson: 'JSON',
+    viewPreview: 'Preview',
+    previewEmpty: 'No nodes to preview',
+    previewAria: 'Workflow diagram',
     // Status
     statusReady: 'Ready',
     statusGenerating: 'Generating workflow...',

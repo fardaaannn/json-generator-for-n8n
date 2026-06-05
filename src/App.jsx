@@ -8,6 +8,7 @@ import Header from './components/Header'
 import Hero from './components/Hero'
 import References from './components/References'
 import Footer from './components/Footer'
+import WorkflowPreview from './components/WorkflowPreview'
 
 export default function App() {
   const { t, lang: uiLang } = useLanguage()
@@ -38,6 +39,7 @@ export default function App() {
   const [wasRepaired, setWasRepaired] = useState(false)
   const [isGenerating, setIsGenerating] = useState(false)
   const [copied, setCopied] = useState(false)
+  const [outputView, setOutputView] = useState('json')
 
   // Optional Tier 2: direct import to a user's own n8n instance
   const [showN8nImport, setShowN8nImport] = useState(false)
@@ -450,6 +452,26 @@ export default function App() {
           </div>
           <div className="output-toolbar">
             <span className="output-filename">{outputFilename}</span>
+            {currentJSON && (
+              <div className="output-view-toggle" role="group" aria-label={t('viewToggle')}>
+                <button
+                  type="button"
+                  className={'view-btn' + (outputView === 'json' ? ' active' : '')}
+                  onClick={() => setOutputView('json')}
+                  aria-pressed={outputView === 'json'}
+                >
+                  {t('viewJson')}
+                </button>
+                <button
+                  type="button"
+                  className={'view-btn' + (outputView === 'preview' ? ' active' : '')}
+                  onClick={() => setOutputView('preview')}
+                  aria-pressed={outputView === 'preview'}
+                >
+                  {t('viewPreview')}
+                </button>
+              </div>
+            )}
           </div>
           {nodeTags.length > 0 && (
             <div className="node-tags">
@@ -459,7 +481,11 @@ export default function App() {
             </div>
           )}
           {currentJSON ? (
-            <pre className="output-code" tabIndex={0} aria-label={t('outputTitle')}>{currentJSON}</pre>
+            outputView === 'preview' ? (
+              <WorkflowPreview workflow={workflowObj} t={t} />
+            ) : (
+              <pre className="output-code" tabIndex={0} aria-label={t('outputTitle')}>{currentJSON}</pre>
+            )
           ) : (
             <div className="output-placeholder">
               <div className="placeholder-icon" aria-hidden="true">{'{ }'}</div>
