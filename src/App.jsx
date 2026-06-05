@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { PROVIDERS } from './lib/providers'
 import { EXAMPLES } from './lib/examples'
-import { sanitizeInput, buildPrompt, cleanOutput, repairJSON, validateStructure, sendRequest } from './lib/pipeline'
+import { sanitizeInput, buildPrompt, cleanOutput, repairJSON, validateStructure, sendRequest, importToN8n } from './lib/pipeline'
 import { getNodeClass } from './lib/getNodeClass'
 import { useLanguage } from './lib/i18n'
 import Header from './components/Header'
@@ -29,6 +29,7 @@ export default function App() {
   const [showKey, setShowKey] = useState(false)
 
   const [currentJSON, setCurrentJSON] = useState('')
+  const [workflowObj, setWorkflowObj] = useState(null)
   const [nodeTags, setNodeTags] = useState([])
   const [outputFilename, setOutputFilename] = useState('workflow.json')
   const [status, setStatus] = useState({ state: '', key: 'statusReady', params: {} })
@@ -38,6 +39,16 @@ export default function App() {
   const [isGenerating, setIsGenerating] = useState(false)
   const [copied, setCopied] = useState(false)
 
+  // Optional Tier 2: direct import to a user's own n8n instance
+  const [showN8nImport, setShowN8nImport] = useState(false)
+  const [n8nUrl, setN8nUrl] = useState('')
+  const [n8nApiKey, setN8nApiKey] = useState('')
+  const [rememberN8n, setRememberN8n] = useState(false)
+  const [showN8nKey, setShowN8nKey] = useState(false)
+  const [n8nImporting, setN8nImporting] = useState(false)
+  const [n8nResult, setN8nResult] = useState(null)
+  const [n8nError, setN8nError] = useState('')
+
   useEffect(() => {
     const storedKey = localStorage.getItem('n8n_gen_api_key')
     const storedRemember = localStorage.getItem('n8n_gen_remember')
@@ -46,6 +57,28 @@ export default function App() {
       setRememberKey(true)
     }
   }, [])
+
+  useEffect(() => {
+    const storedN8nRemember = localStorage.getItem('n8n_gen_n8n_remember')
+    if (storedN8nRemember === 'true') {
+      const storedUrl = localStorage.getItem('n8n_gen_n8n_url')
+      const storedN8nKey = localStorage.getItem('n8n_gen_n8n_key')
+      if (storedUrl || storedN8nKey) {
+        if (storedUrl) setN8nUrl(storedUrl)
+        if (storedN8nKey) setN8nApiKey(storedN8nKey)
+        setRememberN8n(true)
+        setShowN8nImport(true)
+      }
+    }
+  }, [])
+
+  useEffect(() => {
+    if (rememberN8n) {
+      localStorage.setItem('n8n_gen_n8n_url', n8nUrl)
+      localStorage.setItem('n8n_gen_n8n_key', n8nApiKey)
+      localStorage.setItem('n8n_gen_n8n_remember', 'true')
+    }
+  }, [n8nUrl, n8nApiKey])
 
   useEffect(() => {
     if (rememberKey && apiKey) {
@@ -80,6 +113,47 @@ export default function App() {
       localStorage.setItem('n8n_gen_remember', 'false')
     }
   }, [apiKey])
+
+  const handleRememberN8nChange = useCallback((e) => {
+    const checked = e.target.checked
+    setRememberN8n(checked)
+    if (checked) {
+      localStorage.setItem('n8n_gen_n8n_url', n8nUrl)
+      localStorage.setItem('n8n_gen_n8n_key', n8nApiKey)
+      localStorage.setItem('n8n_gen_n8n_remember', 'true')
+    } else {
+      localStorage.removeItem('n8n_gen_n8n_url')
+      localStorage.removeItem('n8n_gen_n8n_key')
+      localStorage.setItem('n8n_gen_n8n_remember', 'false')
+    }
+  }, [n8nUrl, n8nApiKey])
+
+  const handleImportToN8n = useCallback(async () => {
+    setN8nError('')
+    setN8nResult(null)
+    if (!workflowObj) {
+      setN8nError(t('errN8nNoWorkflow'))
+      return
+    }
+    if (!n8nUrl.trim()) {
+      setN8nError(t('errN8nNoUrl'))
+      return
+    }
+    if (!n8nApiKey) {
+      setN8nError(t('errN8nNoKey'))
+      return
+    }
+    setN8nImporting(true)
+    try {
+      const { id } = await importToN8n({ baseUrl: n8nUrl, apiKey: n8nApiKey, workflow: workflowObj }, t)
+      const base = n8nUrl.trim().replace(/\/+$/, '')
+      setN8nResult({ id, url: id ? base + '/workflow/' + id : '' })
+    } catch (e) {
+      setN8nError(e.message)
+    } finally {
+      setN8nImporting(false)
+    }
+  }, [workflowObj, n8nUrl, n8nApiKey, t])
 
   const examples = EXAMPLES[uiLang] || EXAMPLES.en
 
@@ -116,7 +190,10 @@ export default function App() {
     setWarnings([])
     setWasRepaired(false)
     setCurrentJSON('')
+    setWorkflowObj(null)
     setNodeTags([])
+    setN8nResult(null)
+    setN8nError('')
     setStatus({ state: 'active', key: 'statusGenerating', params: {} })
 
     try {
@@ -141,6 +218,7 @@ export default function App() {
       const resultWarnings = validateStructure(parsed, t)
       setWarnings(resultWarnings)
       setCurrentJSON(pretty)
+      setWorkflowObj(parsed)
 
       if (parsed.nodes && parsed.nodes.length > 0) {
         setNodeTags(parsed.nodes.map(n => ({name: n.name || n.type, type: n.type})))
@@ -391,6 +469,84 @@ export default function App() {
           <div className="status-bar" role="status" aria-live="polite">
             <div className={'status-dot' + (status.state ? ' ' + status.state : '')} aria-hidden="true"></div>
             <span>{t(status.key, status.params)}</span>
+          </div>
+
+          <div className="n8n-import">
+            <button
+              type="button"
+              className="n8n-import-toggle"
+              onClick={() => setShowN8nImport((v) => !v)}
+              aria-expanded={showN8nImport}
+              aria-controls="n8n-import-body"
+            >
+              <span>{t('n8nImportTitle')} <span className="optional-tag">{t('optionalTag')}</span></span>
+              <span className="n8n-import-chevron" aria-hidden="true">{showN8nImport ? '\u2212' : '+'}</span>
+            </button>
+            {showN8nImport && (
+              <div className="n8n-import-body" id="n8n-import-body">
+                <p className="security-notice">{t('n8nImportDesc')}</p>
+                <div>
+                  <label className="field-label" htmlFor="n8nUrl">{t('n8nUrlLabel')} <span style={{fontWeight:400, opacity:0.7}}>{t('n8nUrlHint')}</span></label>
+                  <input
+                    id="n8nUrl"
+                    type="url"
+                    value={n8nUrl}
+                    onChange={(e) => { setN8nUrl(e.target.value); setN8nError(''); }}
+                    placeholder="https://your-n8n.example.com"
+                  />
+                </div>
+                <div>
+                  <label className="field-label" htmlFor="n8nApiKey">{t('n8nKeyLabel')}</label>
+                  <div className="password-wrap">
+                    <input
+                      id="n8nApiKey"
+                      type={showN8nKey ? 'text' : 'password'}
+                      value={n8nApiKey}
+                      onChange={(e) => { setN8nApiKey(e.target.value); setN8nError(''); }}
+                      placeholder="n8n_api_..."
+                      autoComplete="off"
+                    />
+                    <button
+                      type="button"
+                      className="eye-btn"
+                      onClick={() => setShowN8nKey(!showN8nKey)}
+                      aria-label={showN8nKey ? t('hideKey') : t('showKey')}
+                      aria-pressed={showN8nKey}
+                    >
+                      {showN8nKey ? '\u25C9' : '\u25C7'}
+                    </button>
+                  </div>
+                </div>
+                <label className="checkbox-label">
+                  <input type="checkbox" checked={rememberN8n} onChange={handleRememberN8nChange} />
+                  {t('n8nRemember')}
+                </label>
+                <button
+                  type="button"
+                  className="btn-primary"
+                  onClick={handleImportToN8n}
+                  disabled={!currentJSON || n8nImporting}
+                  aria-busy={n8nImporting}
+                >
+                  <span>{n8nImporting ? t('n8nImporting') : t('n8nImportBtn')}</span>
+                  <div className="spinner" style={{display: n8nImporting ? 'block' : 'none'}} aria-hidden="true"></div>
+                </button>
+                {n8nError && (
+                  <div className="error-msg" role="alert">
+                    <span aria-hidden="true">&#9888; </span>{n8nError}
+                  </div>
+                )}
+                {n8nResult && (
+                  <div className="success-msg" role="status">
+                    <span aria-hidden="true">&#10003; </span>{t('n8nImportSuccess')}
+                    {n8nResult.url && (
+                      <> <a href={n8nResult.url} target="_blank" rel="noopener noreferrer">{t('n8nOpenWorkflow')}</a></>
+                    )}
+                  </div>
+                )}
+                <p className="security-notice">{t('n8nImportHint')}</p>
+              </div>
+            )}
           </div>
         </div>
       </main>
