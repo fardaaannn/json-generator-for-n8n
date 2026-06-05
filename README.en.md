@@ -4,6 +4,12 @@
 
 Generate n8n workflow JSON from a text description using AI — straight from the browser, with no backend.
 
+## 🚀 Live Demo
+
+Try it right away without running anything on your local machine:
+
+**[https://fardaaannn.github.io/json-generator-for-n8n/](https://fardaaannn.github.io/json-generator-for-n8n/)**
+
 ## Preview
 
 <p align="center">

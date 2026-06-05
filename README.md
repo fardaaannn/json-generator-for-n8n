@@ -4,6 +4,12 @@
 
 Generate workflow n8n JSON dari deskripsi teks menggunakan AI — langsung dari browser, tanpa backend.
 
+## 🚀 Live Demo
+
+Coba langsung tanpa perlu menjalankan program di komputer lokal:
+
+**[https://fardaaannn.github.io/json-generator-for-n8n/](https://fardaaannn.github.io/json-generator-for-n8n/)**
+
 ## Tampilan
 
 <p align="center">
