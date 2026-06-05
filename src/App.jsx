@@ -496,7 +496,9 @@ export default function App() {
               <legend className="field-label">{t('aiProvider')}</legend>
               <div className="grid-2">
                 <div>
-                  <label className="field-label" htmlFor="provider">{t('provider')}</label>
+                  <label className="field-label field-label-row" htmlFor="provider">
+                    <span>{t('provider')}</span>
+                  </label>
                   <select id="provider" value={provider} onChange={handleProviderChange}>
                     <option value="anthropic">Anthropic (Claude)</option>
                     <option value="openai">OpenAI (GPT)</option>
