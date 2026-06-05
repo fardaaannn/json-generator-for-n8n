@@ -122,10 +122,29 @@ export default function App() {
     const cfg = PROVIDERS[provider]
     const fallback = cfg.models
 
-    // Custom / OpenAI-compatible: the user types the model name manually.
+    // Custom / OpenAI-compatible: pull the catalog from <baseUrl>/models once a
+    // base URL is entered. Without one there's nothing to query, so we fall back
+    // to manual model entry (empty dropdown + the "Custom / Other" text field).
     if (provider === 'custom') {
-      setModelsLoading(false); setModelsError(false)
-      return
+      if (!baseUrl) {
+        setModels([]); setModelsLoading(false); setModelsError(false)
+        // No catalog to pick from → fall back to the manual "Custom / Other" entry.
+        setSelectedModel('__custom__')
+        return
+      }
+      setModelsLoading(true); setModelsError(false)
+      const customTimer = setTimeout(() => {
+        fetchModels('custom', { apiKey, baseUrl })
+          .then((list) => {
+            if (cancelled) return
+            const next = (list && list.length) ? list : []
+            setModels(next)
+            setSelectedModel((prev) => (prev === '__custom__' || next.includes(prev)) ? prev : '__custom__')
+          })
+          .catch(() => { if (!cancelled) { setModels([]); setModelsError(true) } })
+          .finally(() => { if (!cancelled) setModelsLoading(false) })
+      }, 500)
+      return () => { cancelled = true; clearTimeout(customTimer) }
     }
     // No live source, or a key is required but not entered yet → built-in list.
     if (!cfg.modelsUrl || (cfg.requiresKeyForModels && !apiKey)) {
@@ -147,11 +166,25 @@ export default function App() {
     }, 500)
 
     return () => { cancelled = true; clearTimeout(timer) }
-  }, [provider, apiKey])
+  }, [provider, apiKey, baseUrl])
 
   const refreshModels = useCallback(() => {
     const cfg = PROVIDERS[provider]
-    if (provider === 'custom' || !cfg.modelsUrl) return
+    // Custom: re-pull from <baseUrl>/models (needs a base URL, key optional).
+    if (provider === 'custom') {
+      if (!baseUrl) return
+      setModelsLoading(true); setModelsError(false)
+      fetchModels('custom', { apiKey, baseUrl, force: true })
+        .then((list) => {
+          const next = (list && list.length) ? list : []
+          setModels(next)
+          setSelectedModel((prev) => (prev === '__custom__' || next.includes(prev)) ? prev : '__custom__')
+        })
+        .catch(() => { setModels([]); setModelsError(true) })
+        .finally(() => setModelsLoading(false))
+      return
+    }
+    if (!cfg.modelsUrl) return
     if (cfg.requiresKeyForModels && !apiKey) return
     const fallback = cfg.models
     setModelsLoading(true); setModelsError(false)
@@ -163,7 +196,7 @@ export default function App() {
       })
       .catch(() => { setModels(fallback); setModelsError(true) })
       .finally(() => setModelsLoading(false))
-  }, [provider, apiKey])
+  }, [provider, apiKey, baseUrl])
 
   const handleProviderChange = useCallback((e) => {
     const newProvider = e.target.value
@@ -450,10 +483,13 @@ export default function App() {
 
   const providerConfig = PROVIDERS[provider]
   const modelOptions = models
-  const showCustomModel = provider === 'custom' || selectedModel === '__custom__'
+  const recommendedSet = new Set(providerConfig.recommended || [])
+  const showCustomModel = selectedModel === '__custom__'
   const showBaseUrl = provider === 'custom'
   const needsKeyForModels = provider !== 'custom' && !!providerConfig.modelsUrl && providerConfig.requiresKeyForModels && !apiKey
-  const canRefreshModels = provider !== 'custom' && !!providerConfig.modelsUrl && !(providerConfig.requiresKeyForModels && !apiKey)
+  const canRefreshModels = provider === 'custom'
+    ? !!baseUrl
+    : (!!providerConfig.modelsUrl && !(providerConfig.requiresKeyForModels && !apiKey))
 
   return (
     <>
@@ -530,10 +566,10 @@ export default function App() {
                     id="model"
                     value={selectedModel}
                     onChange={(e) => { setSelectedModel(e.target.value); setErrorMsg('') }}
-                    disabled={provider === 'custom'}
+                    disabled={provider === 'custom' && modelOptions.length === 0}
                   >
                     {modelOptions.map((m) => (
-                      <option key={m} value={m}>{m}</option>
+                      <option key={m} value={m}>{recommendedSet.has(m) ? '\u2605 ' + m : m}</option>
                     ))}
                     <option value="__custom__">{t('customOther')}</option>
                   </select>

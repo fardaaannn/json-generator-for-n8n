@@ -11,6 +11,8 @@ export const PROVIDERS = {
     name: 'Anthropic (Claude)',
     url: 'https://api.anthropic.com/v1/messages',
     models: ['claude-sonnet-4-20250514','claude-opus-4-20250514','claude-haiku-4-5-20251001'],
+    // Curated "recommended" ids — surfaced first and flagged in the picker.
+    recommended: ['claude-sonnet-4-20250514','claude-opus-4-20250514'],
     // Live model catalog: GET /v1/models (needs the user's key). Falls back to
     // the hardcoded `models` list above when the fetch can't run/fails.
     modelsUrl: 'https://api.anthropic.com/v1/models',
@@ -53,6 +55,7 @@ export const PROVIDERS = {
     name: 'OpenAI (GPT)',
     url: 'https://api.openai.com/v1/chat/completions',
     models: ['gpt-4o','gpt-4o-mini','gpt-4-turbo','gpt-3.5-turbo'],
+    recommended: ['gpt-4o','gpt-4o-mini'],
     modelsUrl: 'https://api.openai.com/v1/models',
     requiresKeyForModels: true,
     buildModelsRequest(apiKey) {
@@ -82,6 +85,7 @@ export const PROVIDERS = {
     name: 'Groq',
     url: 'https://api.groq.com/openai/v1/chat/completions',
     models: ['llama-3.3-70b-versatile','llama-3.1-8b-instant','meta-llama/llama-4-scout-17b-16e-instruct'],
+    recommended: ['llama-3.3-70b-versatile','llama-3.1-8b-instant'],
     modelsUrl: 'https://api.groq.com/openai/v1/models',
     requiresKeyForModels: true,
     buildModelsRequest(apiKey) {
@@ -110,6 +114,7 @@ export const PROVIDERS = {
     name: 'OpenRouter',
     url: 'https://openrouter.ai/api/v1/chat/completions',
     models: ['anthropic/claude-sonnet-4-5','openai/gpt-4o','google/gemini-2.5-flash','meta-llama/llama-3.3-70b-instruct'],
+    recommended: ['anthropic/claude-sonnet-4-5','openai/gpt-4o','google/gemini-2.5-flash'],
     // Public catalog — no API key required. This single endpoint aggregates
     // hundreds of models across nearly every major lab and auto-updates.
     modelsUrl: 'https://openrouter.ai/api/v1/models',
@@ -139,6 +144,28 @@ export const PROVIDERS = {
     name: 'Custom',
     url: '',
     models: [],
+    recommended: [],
+    // Custom OpenAI-compatible gateways expose GET <baseUrl>/models. The URL is
+    // only known at runtime (it depends on the user-entered base URL), so we
+    // flag it as needing a base URL and build the request from it on demand.
+    // No API key is strictly required (some gateways are open), so it stays
+    // optional — when present it's sent as a Bearer token.
+    requiresBaseUrlForModels: true,
+    requiresKeyForModels: false,
+    buildModelsRequest(apiKey, baseUrl) {
+      const cleanBase = (baseUrl || '').replace(/\/+$/, '');
+      return {
+        url: cleanBase + '/models',
+        headers: apiKey ? { 'Authorization': 'Bearer ' + apiKey } : {}
+      };
+    },
+    parseModels(data) {
+      // OpenAI-compatible shape is { data: [{ id }, ...] }, but some servers
+      // return a bare array or a list of plain strings — handle all three.
+      const arr = Array.isArray(data?.data) ? data.data : (Array.isArray(data) ? data : []);
+      const ids = arr.map(m => (typeof m === 'string' ? m : m?.id)).filter(Boolean);
+      return [...new Set(ids)].sort();
+    },
     buildRequest(model, prompt, apiKey, baseUrl, system) {
       const cleanBase = (baseUrl || '').replace(/\/+$/, '');
       const url = cleanBase + '/chat/completions';
