@@ -165,6 +165,16 @@ body {
 .card-title { font-size: 13px; font-weight: 600; color: var(--text); letter-spacing: -0.1px; }
 .card-body { padding: 20px; display: flex; flex-direction: column; gap: 18px; }
 .field-label { font-size: 12px; font-weight: 500; color: var(--muted); margin-bottom: 10px; }
+.field-label-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.model-hint { font-weight: 400; opacity: 0.75; }
+.model-refresh {
+  background: transparent; border: none; color: var(--muted);
+  cursor: pointer; font-size: 15px; line-height: 1; padding: 0 2px;
+  font-family: var(--font); transition: color 0.15s;
+}
+.model-refresh:hover { color: var(--text); }
+.model-refresh:disabled { opacity: 0.4; cursor: default; }
+.model-note { font-size: 11px; color: var(--muted); margin-top: 6px; line-height: 1.5; }
 textarea, select, input[type="text"], input[type="password"], input[type="url"] {
   width: 100%; background: var(--bg);
   border: 1px solid var(--border); border-radius: var(--radius-sm);
