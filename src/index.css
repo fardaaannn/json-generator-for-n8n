@@ -166,8 +166,12 @@ body {
 .card-body { padding: 20px; display: flex; flex-direction: column; gap: 18px; }
 .field-label { font-size: 12px; font-weight: 500; color: var(--muted); margin-bottom: 10px; line-height: 1.5; min-height: 18px; }
 /* Keep the label-with-refresh row exactly as tall as a plain label so the
-   Provider/Model selects below them stay vertically aligned. */
-.field-label-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+   Provider/Model selects below them stay vertically aligned. Both labels use
+   this row layout, so a single fixed-height flex row guarantees the two
+   <select>s start at the same Y position regardless of the loading hint or
+   refresh button. */
+.field-label-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; height: 18px; min-height: 18px; }
+.field-label-row > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
 .model-hint { font-weight: 400; opacity: 0.75; }
 .model-refresh {
   background: transparent; border: none; color: var(--muted);
