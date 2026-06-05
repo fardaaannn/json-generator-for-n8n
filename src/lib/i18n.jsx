@@ -187,7 +187,7 @@ export const translations = {
     hideKey: 'Hide API key',
     // footer
     footerTagline: 'AI-powered n8n workflow generator',
-    footerSource: 'Repo Github',
+    footerSource: 'Github Repo',
     footerPrivacy: 'Your API key never touches our servers \u2014 requests go straight from your browser to the provider.',
     footerDisclaimer: 'An independent project, not affiliated with n8n.',
     footerFollow: 'Follow me',
