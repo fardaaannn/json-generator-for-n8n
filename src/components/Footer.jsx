@@ -51,12 +51,7 @@ export default function Footer() {
   return (
     <footer className="footer">
       <div className="footer-inner">
-        <div className="footer-brand">
-          <span className="footer-name">n8n Generator</span>
-          <span className="footer-tagline">{t('footerTagline')}</span>
-        </div>
-
-        <p className="footer-privacy">{t('footerPrivacy')}</p>
+        <p className="footer-message">{t('footerMessage')}</p>
 
         <nav className="footer-socials" aria-label={t('footerFollow')}>
           {SOCIALS.map((s) => (
