@@ -4,7 +4,7 @@
 
 Generate n8n workflow JSON from a text description using AI — straight from the browser, with no backend.
 
-## 🚀 Live Demo
+## Live Demo
 
 Try it right away without running anything on your local machine:
 
