@@ -98,7 +98,7 @@ describe('maxTokensFor', () => {
   it('grows the token budget with complexity', () => {
     expect(maxTokensFor('simple')).toBe(4000)
     expect(maxTokensFor('medium')).toBe(8000)
-    expect(maxTokensFor('complex')).toBe(16000)
+    expect(maxTokensFor('complex')).toBe(100000)
   })
 
   it('falls back to the medium budget for unknown complexity', () => {
