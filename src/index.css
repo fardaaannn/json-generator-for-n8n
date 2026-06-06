@@ -337,6 +337,26 @@ select {
 .refine-row input { flex: 1; }
 .refine-btn { flex-shrink: 0; }
 
+/* Refine diff summary ("what changed" after a refine) */
+.refine-diff {
+  margin: 0 16px 12px; padding: 11px 14px;
+  background: var(--bg); border: 1px solid var(--border);
+  border-radius: var(--radius-sm); font-size: 13px; line-height: 1.6;
+}
+.refine-diff-head { display: flex; align-items: center; justify-content: space-between; }
+.refine-diff-title { font-weight: 600; color: var(--text); }
+.refine-diff-dismiss {
+  background: none; border: none; cursor: pointer; color: var(--muted);
+  font-size: 17px; line-height: 1; padding: 0 4px;
+}
+.refine-diff-dismiss:hover { color: var(--text); }
+.refine-diff-list { margin: 4px 0 0; padding-left: 0; list-style: none; }
+.refine-diff-list li { margin-top: 3px; }
+.refine-diff-none { margin: 4px 0 0; color: var(--muted); }
+.refine-diff .d-added { color: var(--green); }
+.refine-diff .d-removed { color: var(--error); }
+.refine-diff .d-modified { color: var(--warn); }
+
 /* Optional: direct import to n8n (Tier 2) */
 .n8n-import { border-top: 1px solid var(--border); }
 .n8n-import-toggle {
