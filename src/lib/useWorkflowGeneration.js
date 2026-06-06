@@ -10,6 +10,7 @@ import {
   sendRequest,
   SYSTEM_PROMPT,
 } from './pipeline'
+import { diffWorkflows } from './workflowDiff'
 
 // n8n major version targeted by generated workflows. The user-facing version
 // dropdown was removed (0.x is long obsolete); workflows now always target the
@@ -45,6 +46,9 @@ export function useWorkflowGeneration({ t, onRunStart }) {
   const [refineInstruction, setRefineInstruction] = useState('')
   const [history, setHistory] = useState([])
   const [showHistory, setShowHistory] = useState(false)
+  // Summary of what changed in the most recent refine (null until a refine
+  // runs, or after it's dismissed / a fresh generation starts).
+  const [lastDiff, setLastDiff] = useState(null)
 
   // Restore the recent-generation history on mount.
   useEffect(() => {
@@ -117,18 +121,19 @@ export function useWorkflowGeneration({ t, onRunStart }) {
     setErrorMsg('')
     setWarnings([])
     setWasRepaired(false)
+    setLastDiff(null)
     if (onRunStart) onRunStart()
     setStatus({ state: 'active', key: 'statusGenerating', params: {} })
 
     try {
-      const req = cfg.buildRequest(effectiveModel, prompt, config.apiKey, baseUrlValue, SYSTEM_PROMPT)
+      const req = cfg.buildRequest(effectiveModel, prompt, config.apiKey, baseUrlValue, SYSTEM_PROMPT, config.maxTokens)
       const data = await sendRequest(req, t)
       let raw = cfg.extract(data)
       raw = cleanOutput(raw)
       const { value: parsed, repaired } = repairJSON(raw, t)
       const pretty = JSON.stringify(parsed, null, 2)
       applyResult(parsed, pretty, repaired)
-      if (onSuccess) onSuccess()
+      if (onSuccess) onSuccess(parsed)
     } catch (e) {
       setErrorMsg(t('errGenerateFailed', { msg: e.message }))
       setStatus({ state: 'error', key: 'statusError', params: {} })
@@ -180,11 +185,17 @@ export function useWorkflowGeneration({ t, onRunStart }) {
       return
     }
     const prompt = buildRefinePrompt({ currentJSON, instruction, version: N8N_VERSION, lang: config.lang })
+    // Capture the workflow as it is *now* so we can report what the refine
+    // changed once the model returns the updated version.
+    const before = workflowObj
     await runRequest({
       prompt,
       config,
       setBusy: setIsRefining,
-      onSuccess: () => setRefineInstruction(''),
+      onSuccess: (parsed) => {
+        setRefineInstruction('')
+        setLastDiff(diffWorkflows(before, parsed))
+      },
     })
   }, [refineInstruction, workflowObj, currentJSON, t, validateConfig, runRequest])
 
@@ -198,6 +209,7 @@ export function useWorkflowGeneration({ t, onRunStart }) {
       setOutputFilename(wfNameOut + '.json')
       setWarnings([])
       setWasRepaired(false)
+      setLastDiff(null)
       if (onRunStart) onRunStart()
       setErrorMsg('')
       setStatus({ state: 'done', key: 'statusDone', params: { n: Array.isArray(parsed.nodes) ? parsed.nodes.length : 0 } })
@@ -225,6 +237,7 @@ export function useWorkflowGeneration({ t, onRunStart }) {
     refineInstruction, setRefineInstruction,
     history,
     showHistory, setShowHistory,
+    lastDiff, setLastDiff,
     generate,
     refine,
     restoreHistory,
