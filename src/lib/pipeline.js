@@ -66,8 +66,10 @@ const COMPLEXITY_DESC = {
 // response truncated mid-JSON is useless, so the budget grows with complexity.
 // This is NOT a node-count limit — the model decides how many nodes to create;
 // this only bounds how many tokens it may use. Passed to each provider's
-// buildRequest as `maxTokens`.
-const TOKEN_BUDGET = { simple: 4000, medium: 8000, complex: 16000 };
+// buildRequest as `max_tokens`. The "complex" budget is intentionally very high
+// so large workflows aren't cut off; note some providers/models cap max_tokens
+// to their own output limit and will clamp (or reject) a value above it.
+const TOKEN_BUDGET = { simple: 4000, medium: 8000, complex: 100000 };
 
 export function maxTokensFor(complexity) {
   return TOKEN_BUDGET[complexity] || TOKEN_BUDGET.medium;
