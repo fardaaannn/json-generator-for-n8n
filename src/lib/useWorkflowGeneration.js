@@ -87,7 +87,9 @@ export function useWorkflowGeneration({ t, onRunStart }) {
     setWorkflowObj(parsed)
     setNodeTags(
       (parsed.nodes && parsed.nodes.length > 0)
-        ? parsed.nodes.map((n) => ({ name: n.name || n.type, type: n.type }))
+        ? parsed.nodes
+            .filter((n) => n && typeof n === 'object')
+            .map((n) => ({ name: n.name || n.type, type: n.type }))
         : []
     )
     const wfNameOut = (parsed.name || 'workflow').replace(/\s+/g, '-').toLowerCase()
@@ -208,7 +210,7 @@ export function useWorkflowGeneration({ t, onRunStart }) {
       const parsed = JSON.parse(entry.json)
       setCurrentJSON(entry.json)
       setWorkflowObj(parsed)
-      setNodeTags(Array.isArray(parsed.nodes) ? parsed.nodes.map((n) => ({ name: n.name || n.type, type: n.type })) : [])
+      setNodeTags(Array.isArray(parsed.nodes) ? parsed.nodes.filter((n) => n && typeof n === 'object').map((n) => ({ name: n.name || n.type, type: n.type })) : [])
       const wfNameOut = (parsed.name || 'workflow').replace(/\s+/g, '-').toLowerCase()
       setOutputFilename(wfNameOut + '.json')
       setWarnings([])

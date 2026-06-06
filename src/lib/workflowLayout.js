@@ -30,7 +30,9 @@ export function computeLayout(workflow) {
   if (nodes.length === 0) return null
 
   // Map by name (connections key on names); keep a stable key per node.
-  const keyOf = (n, i) => n.name || n.id || ('node-' + i)
+  // Guard against null/non-object entries so a malformed node can't crash the
+  // whole preview render.
+  const keyOf = (n, i) => ((n && typeof n === 'object' && (n.name || n.id)) || ('node-' + i))
   const order = nodes.map((n, i) => keyOf(n, i))
   const byKey = new Map()
   nodes.forEach((n, i) => byKey.set(keyOf(n, i), n))
@@ -111,7 +113,7 @@ export function computeLayout(workflow) {
   }
 
   const boxes = order.map((k) => {
-    const n = byKey.get(k)
+    const n = byKey.get(k) || {}
     return {
       key: k,
       name: n.name || shortType(n.type) || k,

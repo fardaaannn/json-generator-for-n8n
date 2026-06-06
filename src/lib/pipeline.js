@@ -304,6 +304,14 @@ export function validateStructure(parsed, t = fallbackT) {
   } else {
     const seenIds = new Set();
     parsed.nodes.forEach((n, i) => {
+      // Models occasionally emit a null/non-object entry (or an array hole) in
+      // the nodes list. Reading properties off it would throw and abort the
+      // whole generation even though the rest of the JSON is fine, so we flag
+      // and skip it instead.
+      if (!n || typeof n !== 'object' || Array.isArray(n)) {
+        warnings.push(t('warnNodeNotObject', { n: i + 1 }));
+        return;
+      }
       const name = n.name || t('unnamed');
       if (!n.id) {
         warnings.push(t('warnNodeNoId', { n: i + 1, name }));
@@ -324,7 +332,16 @@ export function validateStructure(parsed, t = fallbackT) {
       }
       if (!n.position) warnings.push(t('warnNodeNoPos', { n: i + 1, name }));
       if (n.parameters === undefined) warnings.push(t('warnNodeNoParams', { n: i + 1, name }));
-      if (n.name) nodeNames.add(n.name);
+      if (n.name) {
+        // n8n keys connections by node name and requires names to be unique.
+        // Duplicates make connection references ambiguous on import and cause
+        // overlapping boxes in the preview, so flag them.
+        if (nodeNames.has(n.name)) {
+          warnings.push(t('warnDupName', { name: n.name }));
+        } else {
+          nodeNames.add(n.name);
+        }
+      }
     });
   }
 

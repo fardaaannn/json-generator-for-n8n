@@ -57,6 +57,24 @@ describe('computeLayout', () => {
     expect(layout.boxes).toHaveLength(2)
     expect(layout.edges).toHaveLength(2)
   })
+
+  it('does not throw on null/non-object node entries', () => {
+    const wf = {
+      nodes: [
+        { name: 'Webhook', type: 'n8n-nodes-base.webhook' },
+        null,
+        'oops',
+      ],
+      connections: {
+        Webhook: { main: [[{ node: 'Filter', type: 'main', index: 0 }]] },
+      },
+    }
+    let layout
+    expect(() => { layout = computeLayout(wf) }).not.toThrow()
+    // One box per entry; the malformed ones get synthetic keys/labels.
+    expect(layout.boxes).toHaveLength(3)
+    expect(layout.boxes.find((b) => b.name === 'Webhook')).toBeTruthy()
+  })
 })
 
 describe('summaryAriaLabel', () => {
