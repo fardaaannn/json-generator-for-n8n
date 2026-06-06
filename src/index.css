@@ -288,13 +288,14 @@ select {
   font-size: 10px; font-family: var(--mono); color: var(--muted);
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
-.wf-node.trigger { border-left: 3px solid var(--tag-trigger-fg); }
-.wf-node.action { border-left: 3px solid var(--green); }
-.wf-node.logic { border-left: 3px solid var(--tag-logic-fg); }
-/* Keyboard focus: nodes are focusable (tabindex=0); the global :focus-visible
-   rule supplies the ring — raise the focused node above edges/siblings so the
-   indicator isn't obscured. */
-.wf-node:focus-visible { z-index: 1; }
+/* Category colour fills the whole node (not just a left accent), matching the
+   node-tag chip palette so it reads consistently in light and dark themes. */
+.wf-node.trigger { background: var(--tag-trigger-bg); border-color: var(--tag-trigger-fg); }
+.wf-node.trigger .wf-node-name { color: var(--tag-trigger-fg); }
+.wf-node.action { background: var(--green-bg); border-color: var(--green); }
+.wf-node.action .wf-node-name { color: var(--green); }
+.wf-node.logic { background: var(--tag-logic-bg); border-color: var(--tag-logic-fg); }
+.wf-node.logic .wf-node-name { color: var(--tag-logic-fg); }
 .output-placeholder {
   padding: 48px 24px; display: flex; flex-direction: column;
   align-items: center; gap: 10px; color: var(--muted); text-align: center;
