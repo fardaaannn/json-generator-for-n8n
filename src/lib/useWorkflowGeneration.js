@@ -6,6 +6,7 @@ import {
   buildRefinePrompt,
   cleanOutput,
   repairJSON,
+  normalizeConnections,
   validateStructure,
   sendRequest,
   SYSTEM_PROMPT,
@@ -126,6 +127,9 @@ export function useWorkflowGeneration({ t, onRunStart }) {
       let raw = cfg.extract(data)
       raw = cleanOutput(raw)
       const { value: parsed, repaired } = repairJSON(raw, t)
+      // Fix connections that reference node ids instead of names (some models
+      // do this), so links survive import and render in the preview.
+      normalizeConnections(parsed)
       const pretty = JSON.stringify(parsed, null, 2)
       applyResult(parsed, pretty, repaired)
       if (onSuccess) onSuccess()

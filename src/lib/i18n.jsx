@@ -97,7 +97,7 @@ export const translations = {
     warnConnUnknownTarget: 'Connection merujuk node tujuan yang tidak ada: {name}',
     unnamed: 'tanpa nama',
     errJsonInvalid: 'JSON tidak valid. Coba sederhanakan deskripsi.',
-    errTimeout: 'Permintaan melebihi batas waktu ({s} detik). Coba lagi atau sederhanakan deskripsi.',
+    errTimeout: 'Permintaan melebihi batas waktu ({s} detik). Provider mungkin sedang sibuk atau lambat merespons \u2014 coba lagi, atau sederhanakan deskripsi.',
     errNetwork: 'Gangguan jaringan: {msg}',
     // password toggle
     showKey: 'Tampilkan API key',
@@ -229,7 +229,7 @@ export const translations = {
     warnConnUnknownTarget: 'A connection references a target node that does not exist: {name}',
     unnamed: 'unnamed',
     errJsonInvalid: 'Invalid JSON. Try simplifying the description.',
-    errTimeout: 'The request timed out ({s} seconds). Try again or simplify the description.',
+    errTimeout: 'The request timed out after {s} seconds. The provider may be busy or slow to respond \u2014 try again, or simplify the description.',
     errNetwork: 'Network error: {msg}',
     // password toggle
     showKey: 'Show API key',
