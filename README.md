@@ -30,7 +30,9 @@ Coba langsung tanpa perlu menjalankan program di komputer lokal:
 - **5 AI Provider**: Anthropic (Claude), OpenAI (GPT), Groq, OpenRouter, Custom (OpenAI-compatible)
 - **Contoh cepat**: 5 template workflow siap pakai
 - **3 tingkat kompleksitas**: Sederhana, Menengah, Lengkap + error handling
-- **Kustomisasi**: Nama workflow, versi n8n (1.x / 0.x), bahasa komentar (ID/EN)
+- **Kustomisasi**: Nama workflow dan bahasa komentar (ID/EN); workflow selalu menargetkan n8n versi 1.x
+- **Daftar model live**: Daftar model diambil langsung dari provider (dengan cache & fallback ke daftar bawaan)
+- **Tema terang/gelap**: Pilihan tema yang mengikuti preferensi sistem dan tersimpan di browser
 - **Direct connection**: API key tetap di browser, tidak dikirim ke server manapun
 - **Copy & Download**: Salin JSON ke clipboard atau unduh file `.json`
 - **Preview visual**: Lihat node & koneksi sebagai diagram, bukan cuma teks JSON (toggle JSON/Preview)
@@ -40,6 +42,7 @@ Coba langsung tanpa perlu menjalankan program di komputer lokal:
 - **Output JSON terstruktur**: Memakai JSON mode provider (OpenAI/Groq/OpenRouter) + system prompt agar hasil JSON lebih andal
 - **Validasi struktur JSON**: Peringatan otomatis jika ada node/tag/connection tidak valid atau node type tidak dikenal
 - **Input sanitization**: Proteksi dasar prompt injection sebelum dikirim ke AI
+- **Referensi template**: Kumpulan koleksi workflow n8n pihak ketiga siap pakai sebagai inspirasi
 
 ## Cara Pakai
 
@@ -64,7 +67,7 @@ Hasil build di folder `dist/` — bisa dibuka langsung atau dihosting ke static 
 
 1. Tulis deskripsi workflow yang kamu mau
 2. Pilih AI Provider dan masukkan API key (jika diperlukan)
-3. Atur opsi (nama workflow, versi n8n, kompleksitas, bahasa)
+3. Atur opsi (nama workflow, kompleksitas, bahasa)
 4. Klik **Generate workflow JSON**
 5. Copy atau download hasil JSON
 6. Import file `.json` ke n8n
@@ -125,16 +128,33 @@ Klik **Import ke n8n**. Workflow akan dibuat lewat endpoint `POST /api/v1/workfl
 ├── vite.config.js
 ├── tailwind.config.js
 ├── postcss.config.js
-├── src/
-│   ├── main.jsx            # Entry point React
-│   ├── App.jsx             # Komponen utama (state + layout)
-│   ├── index.css           # Semua CSS (vanilla + tailwind directives)
-│   ├── components/
-│   │   ├── Header.jsx
-│   │   └── Hero.jsx
-│   └── lib/
-│       ├── providers.js    # Definisi 5 AI provider
-│       ├── examples.js     # Template contoh cepat
-│       ├── getNodeClass.js # Klasifikasi node n8n
-│       └── pipeline.js     # 5-layer pipeline (sanitize → prompt → clean → repair → validate) + import opsional ke n8n
-└── n8n_workflow_generator_v2.html  # Referensi versi lama (CDN-only)
+├── eslint.config.js
+├── public/
+│   └── favicon.svg
+├── scripts/
+│   ├── test-generation.mjs # Smoke test pipeline generasi (tanpa API key)
+│   └── test-providers.mjs  # Cek konektivitas provider (pakai API key asli)
+└── src/
+    ├── main.jsx            # Entry point React
+    ├── App.jsx             # Komponen utama (state + layout)
+    ├── index.css           # Semua CSS (vanilla + tailwind directives)
+    ├── components/
+    │   ├── Header.jsx          # Header: brand, ganti bahasa, toggle tema
+    │   ├── Hero.jsx            # Bagian hero/judul
+    │   ├── WorkflowPreview.jsx # Diagram node & koneksi (SVG, tanpa dependency)
+    │   ├── References.jsx      # Daftar koleksi template n8n pihak ketiga
+    │   └── Footer.jsx          # Footer + tautan sosial
+    └── lib/
+        ├── providers.js          # Definisi 5 AI provider (request, parse, model)
+        ├── modelCatalog.js       # Ambil daftar model live + cache localStorage
+        ├── examples.js           # Template contoh cepat
+        ├── references.js         # Data koleksi template referensi
+        ├── n8nNodes.js           # Katalog node n8n untuk validasi node type
+        ├── getNodeClass.js       # Klasifikasi node (trigger/logic/action)
+        ├── i18n.jsx              # Terjemahan ID/EN + LanguageProvider
+        ├── useTheme.js           # Hook tema terang/gelap
+        ├── useWorkflowGeneration.js # Hook generate/refine + riwayat
+        ├── useN8nImport.js       # Hook import langsung ke n8n (opsional)
+        ├── pipeline.js           # 5-layer pipeline (sanitize → prompt → clean → repair → validate) + import opsional ke n8n
+        └── pipeline.test.js      # Unit test untuk pipeline
+```
