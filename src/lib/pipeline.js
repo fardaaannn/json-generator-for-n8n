@@ -1,6 +1,5 @@
 import { isLikelyUnknownNodeType } from './n8nNodes.js';
 
-const MAX_DESC = 2000;
 // Client-side request timeout. Generous on purpose: reasoning models (and big
 // workflows) can legitimately take well over a minute, so a too-tight limit
 // would abort requests that were about to succeed. Callers can still override
@@ -19,13 +18,14 @@ const fallbackT = (key, params) => {
  * We intentionally do NOT strip "prompt-injection" phrases: a denylist is
  * trivially bypassable, silently corrupts legitimate input, and the real risk
  * is low here (the model only produces JSON the user imports with their own
- * key). Instead we normalize whitespace, remove control characters that could
- * break the request, and enforce a length cap. Injection is handled at the
+ * key). Instead we normalize whitespace and remove control characters that
+ * could break the request. No length cap is enforced — the user is free to
+ * describe arbitrarily large/detailed workflows. Injection is handled at the
  * prompt layer (see buildPrompt) by clearly delimiting user data.
  */
 export function sanitizeInput(desc) {
   if (typeof desc !== 'string') return '';
-  let cleaned = desc
+  const cleaned = desc
     // strip control chars except tab (\t) and newline (\n). The control-char
     // ranges here are intentional, so the no-control-regex rule is disabled.
     // eslint-disable-next-line no-control-regex
@@ -35,9 +35,6 @@ export function sanitizeInput(desc) {
     // collapse runs of 3+ blank lines
     .replace(/\n{3,}/g, '\n\n')
     .trim();
-  if (cleaned.length > MAX_DESC) {
-    cleaned = cleaned.substring(0, MAX_DESC).trim();
-  }
   return cleaned;
 }
 
@@ -65,20 +62,11 @@ const COMPLEXITY_DESC = {
   },
 };
 
-// Soft upper bound on node count, scaled to the requested complexity. This is a
-// guardrail against runaway output (and truncation), not a hard limit. A
-// "complex" workflow with error handling + IF branches + sticky notes would hit
-// a flat cap of 12 almost immediately, so the cap grows with complexity.
-const NODE_CAP = { simple: 6, medium: 12, complex: 30 };
-
-export function nodeCapFor(complexity) {
-  return NODE_CAP[complexity] || NODE_CAP.medium;
-}
-
-// Output token budget scaled to complexity. The node cap is meaningless if the
-// response gets truncated mid-JSON, so the budget grows together with the cap:
-// a ~30-node "complex" workflow needs far more than the 8k default. Paired with
-// nodeCapFor() and passed to each provider's buildRequest as `maxTokens`.
+// Output token budget scaled to complexity. Workflow JSON can be large, and a
+// response truncated mid-JSON is useless, so the budget grows with complexity.
+// This is NOT a node-count limit — the model decides how many nodes to create;
+// this only bounds how many tokens it may use. Passed to each provider's
+// buildRequest as `maxTokens`.
 const TOKEN_BUDGET = { simple: 4000, medium: 8000, complex: 16000 };
 
 export function maxTokensFor(complexity) {
@@ -113,7 +101,6 @@ export function buildPrompt({description, name, version, complexity, lang}) {
   const L = lang === 'en' ? 'en' : 'id';
   const desc = COMPLEXITY_DESC[L];
   const complexityDesc = desc[complexity] || desc.medium;
-  const maxNodes = nodeCapFor(complexity);
 
   if (L === 'en') {
     return `You are an expert n8n workflow builder. Generate a valid, import-ready n8n workflow JSON file.
@@ -139,7 +126,6 @@ ${EXAMPLE_JSON}
 OUTPUT FORMAT:
 Output valid JSON only, with no explanation, no markdown code block, no backticks.
 The JSON must start with { and end with }.
-At most ${maxNodes} nodes.
 
 Structure:
 {"name":"...","nodes":[...],"connections":{...},"active":false,"settings":{},"id":"..."}
@@ -173,7 +159,6 @@ ${EXAMPLE_JSON}
 FORMAT OUTPUT:
 Langsung output JSON valid saja, tanpa penjelasan, tanpa markdown code block, tanpa backtick.
 JSON harus dimulai dengan { dan diakhiri dengan }.
-Maksimal ${maxNodes} nodes.
 
 Struktur:
 {"name":"...","nodes":[...],"connections":{...},"active":false,"settings":{},"id":"..."}
