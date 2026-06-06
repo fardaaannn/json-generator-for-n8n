@@ -1,3 +1,9 @@
+// Default upper bound on tokens the model may generate for a workflow. Kept as
+// a single named constant (instead of a magic number repeated per provider) so
+// it's easy to tune in one place. Each provider's buildRequest accepts an
+// optional `maxTokens` override, falling back to this default.
+export const DEFAULT_MAX_TOKENS = 8000;
+
 // Build the messages array, putting the system instruction in its own role
 // when provided (better steering than stuffing everything into the user turn).
 function buildMessages(prompt, system) {
@@ -30,7 +36,7 @@ export const PROVIDERS = {
     parseModels(data) {
       return Array.isArray(data?.data) ? data.data.map(m => m.id).filter(Boolean) : [];
     },
-    buildRequest(model, prompt, apiKey, baseUrl, system) {
+    buildRequest(model, prompt, apiKey, baseUrl, system, maxTokens = DEFAULT_MAX_TOKENS) {
       // Anthropic Messages API has no response_format; we use the top-level
       // `system` param to enforce the JSON-only contract.
       return {
@@ -43,7 +49,7 @@ export const PROVIDERS = {
         },
         body: JSON.stringify({
           model,
-          max_tokens: 8000,
+          max_tokens: maxTokens,
           ...(system ? { system } : {}),
           messages: [{role:'user', content: prompt}]
         })
@@ -67,13 +73,13 @@ export const PROVIDERS = {
       // that cannot generate workflow JSON — keep only chat-capable GPT/o-series.
       return ids.filter(id => /^(gpt-|o\d|chatgpt)/i.test(id)).sort();
     },
-    buildRequest(model, prompt, apiKey, baseUrl, system) {
+    buildRequest(model, prompt, apiKey, baseUrl, system, maxTokens = DEFAULT_MAX_TOKENS) {
       return {
         url: this.url,
         headers: {'Content-Type': 'application/json', 'Authorization': 'Bearer ' + apiKey},
         body: JSON.stringify({
           model,
-          max_tokens: 8000,
+          max_tokens: maxTokens,
           messages: buildMessages(prompt, system),
           response_format: { type: 'json_object' }
         })
@@ -96,13 +102,13 @@ export const PROVIDERS = {
       // Drop speech-to-text / TTS / guard models that can't produce text JSON.
       return ids.filter(id => !/whisper|tts|guard|playai/i.test(id)).sort();
     },
-    buildRequest(model, prompt, apiKey, baseUrl, system) {
+    buildRequest(model, prompt, apiKey, baseUrl, system, maxTokens = DEFAULT_MAX_TOKENS) {
       return {
         url: this.url,
         headers: {'Content-Type': 'application/json', 'Authorization': 'Bearer ' + apiKey},
         body: JSON.stringify({
           model,
-          max_tokens: 8000,
+          max_tokens: maxTokens,
           messages: buildMessages(prompt, system),
           response_format: { type: 'json_object' }
         })
@@ -126,13 +132,13 @@ export const PROVIDERS = {
       const ids = Array.isArray(data?.data) ? data.data.map(m => m.id).filter(Boolean) : [];
       return ids.sort();
     },
-    buildRequest(model, prompt, apiKey, baseUrl, system) {
+    buildRequest(model, prompt, apiKey, baseUrl, system, maxTokens = DEFAULT_MAX_TOKENS) {
       return {
         url: this.url,
         headers: {'Content-Type': 'application/json', 'Authorization': 'Bearer ' + apiKey},
         body: JSON.stringify({
           model,
-          max_tokens: 8000,
+          max_tokens: maxTokens,
           messages: buildMessages(prompt, system),
           response_format: { type: 'json_object' }
         })
@@ -166,7 +172,7 @@ export const PROVIDERS = {
       const ids = arr.map(m => (typeof m === 'string' ? m : m?.id)).filter(Boolean);
       return [...new Set(ids)].sort();
     },
-    buildRequest(model, prompt, apiKey, baseUrl, system) {
+    buildRequest(model, prompt, apiKey, baseUrl, system, maxTokens = DEFAULT_MAX_TOKENS) {
       const cleanBase = (baseUrl || '').replace(/\/+$/, '');
       const url = cleanBase + '/chat/completions';
       // No response_format here: a custom OpenAI-compatible endpoint may point
@@ -180,7 +186,7 @@ export const PROVIDERS = {
         },
         body: JSON.stringify({
           model,
-          max_tokens: 8000,
+          max_tokens: maxTokens,
           messages: buildMessages(prompt, system)
         })
       };

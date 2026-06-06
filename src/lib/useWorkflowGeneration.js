@@ -121,7 +121,7 @@ export function useWorkflowGeneration({ t, onRunStart }) {
     setStatus({ state: 'active', key: 'statusGenerating', params: {} })
 
     try {
-      const req = cfg.buildRequest(effectiveModel, prompt, config.apiKey, baseUrlValue, SYSTEM_PROMPT)
+      const req = cfg.buildRequest(effectiveModel, prompt, config.apiKey, baseUrlValue, SYSTEM_PROMPT, config.maxTokens)
       const data = await sendRequest(req, t)
       let raw = cfg.extract(data)
       raw = cleanOutput(raw)
