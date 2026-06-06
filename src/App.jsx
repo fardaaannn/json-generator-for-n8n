@@ -65,6 +65,13 @@ export default function App() {
 
   // Persist the API key only while "remember" is enabled. Depends on
   // `rememberKey` too so it can't write/skip based on a stale toggle value.
+  //
+  // SECURITY: this stores the provider API key in localStorage in plaintext.
+  // That is an inherent, accepted trade-off for this no-backend tool (the key
+  // would otherwise have to be re-entered every visit), but it means any XSS on
+  // this origin could read the key. It is opt-in (off by default) and surfaced
+  // to the user via the "remember" warning notice. Keep this in mind before
+  // adding any third-party scripts or untrusted markup to the page.
   useEffect(() => {
     if (rememberKey && apiKey) {
       localStorage.setItem('n8n_gen_api_key', apiKey)

@@ -10,6 +10,12 @@ import { importToN8n } from './pipeline'
  * The persistence effect depends on `rememberN8n` as well as the values so it
  * can't write with a stale toggle (the previous inline effect omitted it).
  *
+ * SECURITY: like the provider API key, the n8n URL and API key are stored in
+ * localStorage in plaintext when "remember" is enabled. This is an inherent
+ * trade-off of a no-backend, bring-your-own-key tool and is opt-in (off by
+ * default); any XSS on this origin could read these values, so avoid
+ * introducing untrusted scripts/markup on the page.
+ *
  * @param {{ t: (key: string, params?: object) => string }} args
  */
 export function useN8nImport({ t }) {
