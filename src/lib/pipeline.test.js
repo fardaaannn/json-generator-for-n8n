@@ -8,7 +8,6 @@ import {
   repairJSON,
   normalizeConnections,
   validateStructure,
-  nodeCapFor,
   maxTokensFor,
   EXAMPLE_JSON,
 } from './pipeline.js'
@@ -38,9 +37,9 @@ describe('sanitizeInput', () => {
     expect(sanitizeInput('a\n\n\n\n\nb')).toBe('a\n\nb')
   })
 
-  it('caps the description at 2000 characters', () => {
-    const long = 'x'.repeat(2500)
-    expect(sanitizeInput(long).length).toBe(2000)
+  it('does not cap the description length (no max characters)', () => {
+    const long = 'x'.repeat(5000)
+    expect(sanitizeInput(long).length).toBe(5000)
   })
 })
 
@@ -87,23 +86,11 @@ describe('buildPrompt', () => {
     expect(prompt).not.toContain('Kamu adalah expert')
   })
 
-  it('scales the node cap with complexity instead of a fixed 12', () => {
-    expect(buildPrompt({ ...base, complexity: 'simple' })).toContain('6 nodes')
-    expect(buildPrompt({ ...base, complexity: 'medium' })).toContain('12 nodes')
-    expect(buildPrompt({ ...base, complexity: 'complex' })).toContain('30 nodes')
-  })
-})
-
-describe('nodeCapFor', () => {
-  it('returns a cap that grows with complexity', () => {
-    expect(nodeCapFor('simple')).toBe(6)
-    expect(nodeCapFor('medium')).toBe(12)
-    expect(nodeCapFor('complex')).toBe(30)
-  })
-
-  it('falls back to the medium cap for unknown complexity', () => {
-    expect(nodeCapFor('nonsense')).toBe(12)
-    expect(nodeCapFor(undefined)).toBe(12)
+  it('does not suggest any node-count limit to the model', () => {
+    // No "At most N nodes" / "Maksimal N nodes" guidance — the model decides.
+    expect(buildPrompt({ ...base, complexity: 'complex' })).not.toMatch(/\d+\s*nodes/i)
+    expect(buildPrompt({ ...base, complexity: 'complex', lang: 'en' })).not.toContain('At most')
+    expect(buildPrompt({ ...base, complexity: 'complex' })).not.toContain('Maksimal')
   })
 })
 

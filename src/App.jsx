@@ -261,7 +261,6 @@ export default function App() {
               <textarea
                 id="desc"
                 rows="8"
-                maxLength={2000}
                 value={description}
                 onChange={(e) => { setDescription(e.target.value); setErrorMsg('') }}
                 placeholder={t('descPlaceholder')}
