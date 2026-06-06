@@ -12,6 +12,10 @@ import References from './components/References'
 import Footer from './components/Footer'
 import WorkflowPreview from './components/WorkflowPreview'
 
+// Third-party resource where users can obtain a free provider API key/token.
+// External service, outside this project's control (see disclaimer wording).
+const FREE_KEY_URL = 'https://www.tokengratis.id/'
+
 export default function App() {
   const { t, lang: uiLang } = useLanguage()
 
@@ -355,6 +359,12 @@ export default function App() {
                     {showKey ? '\u25C9' : '\u25C7'}
                   </button>
                 </div>
+                <p className="apikey-help">
+                  {t('apiKeyFreeHelp')}{' '}
+                  <a href={FREE_KEY_URL} target="_blank" rel="noopener noreferrer">
+                    tokengratis.id <span aria-hidden="true">&rarr;</span>
+                  </a>
+                </p>
                 <div style={{marginTop:'6px'}}>
                   <label className="checkbox-label">
                     <input type="checkbox" checked={rememberKey} onChange={handleRememberChange} />
