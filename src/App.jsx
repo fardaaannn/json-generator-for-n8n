@@ -1,20 +1,16 @@
 import { useState, useEffect, useCallback } from 'react'
 import { PROVIDERS } from './lib/providers'
 import { EXAMPLES } from './lib/examples'
-import { sanitizeInput, buildPrompt, cleanOutput, repairJSON, validateStructure, sendRequest, importToN8n, SYSTEM_PROMPT, buildRefinePrompt } from './lib/pipeline'
 import { fetchModels } from './lib/modelCatalog'
 import { getNodeClass } from './lib/getNodeClass'
 import { useLanguage } from './lib/i18n'
+import { useWorkflowGeneration } from './lib/useWorkflowGeneration'
+import { useN8nImport } from './lib/useN8nImport'
 import Header from './components/Header'
 import Hero from './components/Hero'
 import References from './components/References'
 import Footer from './components/Footer'
 import WorkflowPreview from './components/WorkflowPreview'
-
-// n8n major version targeted by generated workflows. The user-facing version
-// dropdown was removed (0.x is long obsolete); workflows now always target the
-// current 1.x line. Kept as a single constant so prompts stay consistent.
-const N8N_VERSION = '1.x'
 
 export default function App() {
   const { t, lang: uiLang } = useLanguage()
@@ -40,31 +36,23 @@ export default function App() {
   const [rememberKey, setRememberKey] = useState(false)
   const [showKey, setShowKey] = useState(false)
 
-  const [currentJSON, setCurrentJSON] = useState('')
-  const [workflowObj, setWorkflowObj] = useState(null)
-  const [nodeTags, setNodeTags] = useState([])
-  const [outputFilename, setOutputFilename] = useState('workflow.json')
-  const [status, setStatus] = useState({ state: '', key: 'statusReady', params: {} })
-  const [errorMsg, setErrorMsg] = useState('')
-  const [warnings, setWarnings] = useState([])
-  const [wasRepaired, setWasRepaired] = useState(false)
-  const [isGenerating, setIsGenerating] = useState(false)
   const [copied, setCopied] = useState(false)
   const [outputView, setOutputView] = useState('json')
-  const [refineInstruction, setRefineInstruction] = useState('')
-  const [isRefining, setIsRefining] = useState(false)
-  const [history, setHistory] = useState([])
-  const [showHistory, setShowHistory] = useState(false)
 
-  // Optional Tier 2: direct import to a user's own n8n instance
-  const [showN8nImport, setShowN8nImport] = useState(false)
-  const [n8nUrl, setN8nUrl] = useState('')
-  const [n8nApiKey, setN8nApiKey] = useState('')
-  const [rememberN8n, setRememberN8n] = useState(false)
-  const [showN8nKey, setShowN8nKey] = useState(false)
-  const [n8nImporting, setN8nImporting] = useState(false)
-  const [n8nResult, setN8nResult] = useState(null)
-  const [n8nError, setN8nError] = useState('')
+  // Optional Tier 2: direct import to a user's own n8n instance.
+  const n8n = useN8nImport({ t })
+
+  // Workflow generation/refinement, output state, and recent history. When a
+  // run starts it clears any lingering n8n import banner.
+  const gen = useWorkflowGeneration({ t, onRunStart: n8n.reset })
+  const {
+    currentJSON, workflowObj, nodeTags, outputFilename,
+    status, errorMsg, setErrorMsg, warnings, wasRepaired,
+    isGenerating, isRefining,
+    refineInstruction, setRefineInstruction,
+    history, showHistory, setShowHistory,
+    generate, refine, restoreHistory, clearHistory,
+  } = gen
 
   useEffect(() => {
     const storedKey = localStorage.getItem('n8n_gen_api_key')
@@ -75,44 +63,21 @@ export default function App() {
     }
   }, [])
 
-  useEffect(() => {
-    try {
-      const raw = localStorage.getItem('n8n_gen_history')
-      if (raw) {
-        const parsed = JSON.parse(raw)
-        if (Array.isArray(parsed)) setHistory(parsed.slice(0, 10))
-      }
-    } catch (e) { /* ignore corrupted history */ }
-  }, [])
-
-  useEffect(() => {
-    const storedN8nRemember = localStorage.getItem('n8n_gen_n8n_remember')
-    if (storedN8nRemember === 'true') {
-      const storedUrl = localStorage.getItem('n8n_gen_n8n_url')
-      const storedN8nKey = localStorage.getItem('n8n_gen_n8n_key')
-      if (storedUrl || storedN8nKey) {
-        if (storedUrl) setN8nUrl(storedUrl)
-        if (storedN8nKey) setN8nApiKey(storedN8nKey)
-        setRememberN8n(true)
-        setShowN8nImport(true)
-      }
-    }
-  }, [])
-
-  useEffect(() => {
-    if (rememberN8n) {
-      localStorage.setItem('n8n_gen_n8n_url', n8nUrl)
-      localStorage.setItem('n8n_gen_n8n_key', n8nApiKey)
-      localStorage.setItem('n8n_gen_n8n_remember', 'true')
-    }
-  }, [n8nUrl, n8nApiKey])
-
+  // Persist the API key only while "remember" is enabled. Depends on
+  // `rememberKey` too so it can't write/skip based on a stale toggle value.
+  //
+  // SECURITY: this stores the provider API key in localStorage in plaintext.
+  // That is an inherent, accepted trade-off for this no-backend tool (the key
+  // would otherwise have to be re-entered every visit), but it means any XSS on
+  // this origin could read the key. It is opt-in (off by default) and surfaced
+  // to the user via the "remember" warning notice. Keep this in mind before
+  // adding any third-party scripts or untrusted markup to the page.
   useEffect(() => {
     if (rememberKey && apiKey) {
       localStorage.setItem('n8n_gen_api_key', apiKey)
       localStorage.setItem('n8n_gen_remember', 'true')
     }
-  }, [apiKey])
+  }, [apiKey, rememberKey])
 
   // Load the live model catalog for the current provider. Debounced on apiKey
   // so typing/pasting a key doesn't fire a request per keystroke. Always keeps
@@ -213,7 +178,7 @@ export default function App() {
     } else {
       setSelectedModel('__custom__')
     }
-  }, [])
+  }, [setErrorMsg])
 
   const handleRememberChange = useCallback((e) => {
     const checked = e.target.checked
@@ -229,240 +194,24 @@ export default function App() {
     }
   }, [apiKey])
 
-  const handleRememberN8nChange = useCallback((e) => {
-    const checked = e.target.checked
-    setRememberN8n(checked)
-    if (checked) {
-      localStorage.setItem('n8n_gen_n8n_url', n8nUrl)
-      localStorage.setItem('n8n_gen_n8n_key', n8nApiKey)
-      localStorage.setItem('n8n_gen_n8n_remember', 'true')
-    } else {
-      localStorage.removeItem('n8n_gen_n8n_url')
-      localStorage.removeItem('n8n_gen_n8n_key')
-      localStorage.setItem('n8n_gen_n8n_remember', 'false')
-    }
-  }, [n8nUrl, n8nApiKey])
-
-  const handleImportToN8n = useCallback(async () => {
-    setN8nError('')
-    setN8nResult(null)
-    if (!workflowObj) {
-      setN8nError(t('errN8nNoWorkflow'))
-      return
-    }
-    if (!n8nUrl.trim()) {
-      setN8nError(t('errN8nNoUrl'))
-      return
-    }
-    if (!n8nApiKey) {
-      setN8nError(t('errN8nNoKey'))
-      return
-    }
-    setN8nImporting(true)
-    try {
-      const { id } = await importToN8n({ baseUrl: n8nUrl, apiKey: n8nApiKey, workflow: workflowObj }, t)
-      const base = n8nUrl.trim().replace(/\/+$/, '')
-      setN8nResult({ id, url: id ? base + '/workflow/' + id : '' })
-    } catch (e) {
-      setN8nError(e.message)
-    } finally {
-      setN8nImporting(false)
-    }
-  }, [workflowObj, n8nUrl, n8nApiKey, t])
-
   const examples = EXAMPLES[uiLang] || EXAMPLES.en
 
   const fillExample = useCallback((key) => {
     setDescription(examples[key] || key)
     setErrorMsg('')
-  }, [examples])
+  }, [examples, setErrorMsg])
 
-  const pushHistory = useCallback((parsed, pretty) => {
-    const entry = {
-      id: Date.now() + '-' + Math.random().toString(36).slice(2, 7),
-      name: (parsed && typeof parsed.name === 'string' && parsed.name) ? parsed.name : 'workflow',
-      nodeCount: Array.isArray(parsed?.nodes) ? parsed.nodes.length : 0,
-      ts: Date.now(),
-      json: pretty,
-    }
-    setHistory((prev) => {
-      const next = [entry, ...prev].slice(0, 10)
-      try { localStorage.setItem('n8n_gen_history', JSON.stringify(next)) } catch (e) { /* quota */ }
-      return next
-    })
-  }, [])
+  const handleGenerate = useCallback(() => {
+    generate({ description, wfName, complexity, lang, provider, selectedModel, customModel, baseUrl, apiKey })
+  }, [generate, description, wfName, complexity, lang, provider, selectedModel, customModel, baseUrl, apiKey])
 
-  const restoreHistory = useCallback((entry) => {
-    try {
-      const parsed = JSON.parse(entry.json)
-      setCurrentJSON(entry.json)
-      setWorkflowObj(parsed)
-      setNodeTags(Array.isArray(parsed.nodes) ? parsed.nodes.map(n => ({ name: n.name || n.type, type: n.type })) : [])
-      const wfNameOut = (parsed.name || 'workflow').replace(/\s+/g, '-').toLowerCase()
-      setOutputFilename(wfNameOut + '.json')
-      setWarnings([])
-      setWasRepaired(false)
-      setN8nResult(null)
-      setN8nError('')
-      setErrorMsg('')
-      setStatus({ state: 'done', key: 'statusDone', params: { n: Array.isArray(parsed.nodes) ? parsed.nodes.length : 0 } })
-    } catch (e) {
-      setErrorMsg(t('errGenerateFailed', { msg: e.message }))
-    }
-  }, [t])
+  const handleRefine = useCallback(() => {
+    refine({ lang, provider, selectedModel, customModel, baseUrl, apiKey })
+  }, [refine, lang, provider, selectedModel, customModel, baseUrl, apiKey])
 
-  const clearHistory = useCallback(() => {
-    setHistory([])
-    try { localStorage.removeItem('n8n_gen_history') } catch (e) { /* ignore */ }
-  }, [])
-
-  const handleGenerate = useCallback(async () => {
-    const cleaned = sanitizeInput(description)
-    if (!cleaned) {
-      setErrorMsg(t('errEnterDesc'))
-      return
-    }
-
-    const cfg = PROVIDERS[provider]
-    const effectiveModel = selectedModel === '__custom__' ? customModel : selectedModel
-
-    if (!effectiveModel) {
-      setErrorMsg(t('errEnterModel'))
-      return
-    }
-    if (!apiKey) {
-      setErrorMsg(t('errEnterApiKey', { provider: cfg.name }))
-      return
-    }
-    if (provider === 'custom' && !baseUrl) {
-      setErrorMsg(t('errEnterBaseUrl'))
-      return
-    }
-
-    setIsGenerating(true)
-    setErrorMsg('')
-    setWarnings([])
-    setWasRepaired(false)
-    setCurrentJSON('')
-    setWorkflowObj(null)
-    setNodeTags([])
-    setN8nResult(null)
-    setN8nError('')
-    setStatus({ state: 'active', key: 'statusGenerating', params: {} })
-
-    try {
-      const prompt = buildPrompt({
-        description: cleaned,
-        name: wfName || 'My Workflow',
-        version: N8N_VERSION,
-        complexity,
-        lang
-      })
-
-      const baseUrlValue = provider === 'custom' ? baseUrl : undefined
-      const req = cfg.buildRequest(effectiveModel, prompt, apiKey, baseUrlValue, SYSTEM_PROMPT)
-
-      const data = await sendRequest(req, t)
-      let raw = cfg.extract(data)
-      raw = cleanOutput(raw)
-      const { value: parsed, repaired } = repairJSON(raw, t)
-      const pretty = JSON.stringify(parsed, null, 2)
-
-      setWasRepaired(repaired)
-      const resultWarnings = validateStructure(parsed, t)
-      setWarnings(resultWarnings)
-      setCurrentJSON(pretty)
-      setWorkflowObj(parsed)
-
-      if (parsed.nodes && parsed.nodes.length > 0) {
-        setNodeTags(parsed.nodes.map(n => ({name: n.name || n.type, type: n.type})))
-      }
-
-      const wfNameOut = (parsed.name || 'workflow').replace(/\s+/g, '-').toLowerCase()
-      setOutputFilename(wfNameOut + '.json')
-
-      const nodeCount = parsed.nodes?.length || 0
-      setStatus({
-        state: 'done',
-        key: (resultWarnings.length > 0 || repaired) ? 'statusDoneWarn' : 'statusDone',
-        params: { n: nodeCount }
-      })
-      pushHistory(parsed, pretty)
-
-    } catch(e) {
-      setErrorMsg(t('errGenerateFailed', { msg: e.message }))
-      setStatus({ state: 'error', key: 'statusError', params: {} })
-    } finally {
-      setIsGenerating(false)
-    }
-  }, [description, wfName, complexity, lang, provider, selectedModel, customModel, baseUrl, apiKey, t, pushHistory])
-
-  const handleRefine = useCallback(async () => {
-    const instruction = sanitizeInput(refineInstruction)
-    if (!instruction) {
-      setErrorMsg(t('errEnterRefine'))
-      return
-    }
-    if (!workflowObj || !currentJSON) {
-      setErrorMsg(t('errN8nNoWorkflow'))
-      return
-    }
-
-    const cfg = PROVIDERS[provider]
-    const effectiveModel = selectedModel === '__custom__' ? customModel : selectedModel
-    if (!effectiveModel) { setErrorMsg(t('errEnterModel')); return }
-    if (!apiKey) { setErrorMsg(t('errEnterApiKey', { provider: cfg.name })); return }
-    if (provider === 'custom' && !baseUrl) { setErrorMsg(t('errEnterBaseUrl')); return }
-
-    setIsRefining(true)
-    setErrorMsg('')
-    setWarnings([])
-    setWasRepaired(false)
-    setN8nResult(null)
-    setN8nError('')
-    setStatus({ state: 'active', key: 'statusGenerating', params: {} })
-
-    try {
-      const prompt = buildRefinePrompt({ currentJSON, instruction, version: N8N_VERSION, lang })
-      const baseUrlValue = provider === 'custom' ? baseUrl : undefined
-      const req = cfg.buildRequest(effectiveModel, prompt, apiKey, baseUrlValue, SYSTEM_PROMPT)
-
-      const data = await sendRequest(req, t)
-      let raw = cfg.extract(data)
-      raw = cleanOutput(raw)
-      const { value: parsed, repaired } = repairJSON(raw, t)
-      const pretty = JSON.stringify(parsed, null, 2)
-
-      setWasRepaired(repaired)
-      const resultWarnings = validateStructure(parsed, t)
-      setWarnings(resultWarnings)
-      setCurrentJSON(pretty)
-      setWorkflowObj(parsed)
-
-      if (parsed.nodes && parsed.nodes.length > 0) {
-        setNodeTags(parsed.nodes.map(n => ({ name: n.name || n.type, type: n.type })))
-      } else {
-        setNodeTags([])
-      }
-
-      const wfNameOut = (parsed.name || 'workflow').replace(/\s+/g, '-').toLowerCase()
-      setOutputFilename(wfNameOut + '.json')
-
-      const nodeCount = parsed.nodes?.length || 0
-      setStatus({
-        state: 'done',
-        key: (resultWarnings.length > 0 || repaired) ? 'statusDoneWarn' : 'statusDone',
-        params: { n: nodeCount }
-      })
-      pushHistory(parsed, pretty)
-      setRefineInstruction('')
-    } catch (e) {
-      setErrorMsg(t('errGenerateFailed', { msg: e.message }))
-      setStatus({ state: 'error', key: 'statusError', params: {} })
-    } finally {
-      setIsRefining(false)
-    }
-  }, [refineInstruction, currentJSON, workflowObj, lang, provider, selectedModel, customModel, baseUrl, apiKey, t, pushHistory])
+  const handleImportToN8n = useCallback(() => {
+    n8n.importWorkflow(workflowObj)
+  }, [n8n, workflowObj])
 
   const handleCopy = useCallback(() => {
     if (!currentJSON) return
@@ -766,14 +515,14 @@ export default function App() {
             <button
               type="button"
               className="n8n-import-toggle"
-              onClick={() => setShowN8nImport((v) => !v)}
-              aria-expanded={showN8nImport}
+              onClick={() => n8n.setShowN8nImport((v) => !v)}
+              aria-expanded={n8n.showN8nImport}
               aria-controls="n8n-import-body"
             >
               <span>{t('n8nImportTitle')} <span className="optional-tag">{t('optionalTag')}</span></span>
-              <span className="n8n-import-chevron" aria-hidden="true">{showN8nImport ? '\u2212' : '+'}</span>
+              <span className="n8n-import-chevron" aria-hidden="true">{n8n.showN8nImport ? '\u2212' : '+'}</span>
             </button>
-            {showN8nImport && (
+            {n8n.showN8nImport && (
               <div className="n8n-import-body" id="n8n-import-body">
                 <p className="security-notice">{t('n8nImportDesc')}</p>
                 <div>
@@ -781,8 +530,8 @@ export default function App() {
                   <input
                     id="n8nUrl"
                     type="url"
-                    value={n8nUrl}
-                    onChange={(e) => { setN8nUrl(e.target.value); setN8nError(''); }}
+                    value={n8n.n8nUrl}
+                    onChange={(e) => { n8n.setN8nUrl(e.target.value); n8n.setN8nError(''); }}
                     placeholder="https://your-n8n.example.com"
                   />
                 </div>
@@ -791,47 +540,47 @@ export default function App() {
                   <div className="password-wrap">
                     <input
                       id="n8nApiKey"
-                      type={showN8nKey ? 'text' : 'password'}
-                      value={n8nApiKey}
-                      onChange={(e) => { setN8nApiKey(e.target.value); setN8nError(''); }}
+                      type={n8n.showN8nKey ? 'text' : 'password'}
+                      value={n8n.n8nApiKey}
+                      onChange={(e) => { n8n.setN8nApiKey(e.target.value); n8n.setN8nError(''); }}
                       placeholder="n8n_api_..."
                       autoComplete="off"
                     />
                     <button
                       type="button"
                       className="eye-btn"
-                      onClick={() => setShowN8nKey(!showN8nKey)}
-                      aria-label={showN8nKey ? t('hideKey') : t('showKey')}
-                      aria-pressed={showN8nKey}
+                      onClick={() => n8n.setShowN8nKey(!n8n.showN8nKey)}
+                      aria-label={n8n.showN8nKey ? t('hideKey') : t('showKey')}
+                      aria-pressed={n8n.showN8nKey}
                     >
-                      {showN8nKey ? '\u25C9' : '\u25C7'}
+                      {n8n.showN8nKey ? '\u25C9' : '\u25C7'}
                     </button>
                   </div>
                 </div>
                 <label className="checkbox-label">
-                  <input type="checkbox" checked={rememberN8n} onChange={handleRememberN8nChange} />
+                  <input type="checkbox" checked={n8n.rememberN8n} onChange={n8n.handleRememberN8nChange} />
                   {t('n8nRemember')}
                 </label>
                 <button
                   type="button"
                   className="btn-primary"
                   onClick={handleImportToN8n}
-                  disabled={!currentJSON || n8nImporting}
-                  aria-busy={n8nImporting}
+                  disabled={!currentJSON || n8n.n8nImporting}
+                  aria-busy={n8n.n8nImporting}
                 >
-                  <span>{n8nImporting ? t('n8nImporting') : t('n8nImportBtn')}</span>
-                  <div className="spinner" style={{display: n8nImporting ? 'block' : 'none'}} aria-hidden="true"></div>
+                  <span>{n8n.n8nImporting ? t('n8nImporting') : t('n8nImportBtn')}</span>
+                  <div className="spinner" style={{display: n8n.n8nImporting ? 'block' : 'none'}} aria-hidden="true"></div>
                 </button>
-                {n8nError && (
+                {n8n.n8nError && (
                   <div className="error-msg" role="alert">
-                    <span aria-hidden="true">&#9888; </span>{n8nError}
+                    <span aria-hidden="true">&#9888; </span>{n8n.n8nError}
                   </div>
                 )}
-                {n8nResult && (
+                {n8n.n8nResult && (
                   <div className="success-msg" role="status">
                     <span aria-hidden="true">&#10003; </span>{t('n8nImportSuccess')}
-                    {n8nResult.url && (
-                      <> <a href={n8nResult.url} target="_blank" rel="noopener noreferrer">{t('n8nOpenWorkflow')}</a></>
+                    {n8n.n8nResult.url && (
+                      <> <a href={n8n.n8nResult.url} target="_blank" rel="noopener noreferrer">{t('n8nOpenWorkflow')}</a></>
                     )}
                   </div>
                 )}

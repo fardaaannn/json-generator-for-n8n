@@ -22,7 +22,9 @@ const fallbackT = (key, params) => {
 export function sanitizeInput(desc) {
   if (typeof desc !== 'string') return '';
   let cleaned = desc
-    // strip control chars except tab (\t) and newline (\n)
+    // strip control chars except tab (\t) and newline (\n). The control-char
+    // ranges here are intentional, so the no-control-regex rule is disabled.
+    // eslint-disable-next-line no-control-regex
     .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, '')
     // normalize CRLF / CR to LF
     .replace(/\r\n?/g, '\n')
