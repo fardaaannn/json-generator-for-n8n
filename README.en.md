@@ -30,7 +30,9 @@ Try it right away without running anything on your local machine:
 - **5 AI providers**: Anthropic (Claude), OpenAI (GPT), Groq, OpenRouter, Custom (OpenAI-compatible)
 - **Quick examples**: 5 ready-to-use workflow templates
 - **3 complexity levels**: Simple, Medium, Full + error handling
-- **Customization**: Workflow name, n8n version (1.x / 0.x), comment language (ID/EN)
+- **Customization**: Workflow name and comment language (ID/EN); workflows always target n8n 1.x
+- **Live model list**: Models are fetched straight from the provider (with caching & fallback to the built-in list)
+- **Light/dark theme**: A theme toggle that follows your system preference and persists in the browser
 - **Direct connection**: API key stays in the browser, never sent to any server
 - **Copy & Download**: Copy the JSON to the clipboard or download a `.json` file
 - **Visual preview**: See nodes & connections as a diagram, not just JSON text (JSON/Preview toggle)
@@ -40,6 +42,7 @@ Try it right away without running anything on your local machine:
 - **Structured JSON output**: Uses providers' JSON mode (OpenAI/Groq/OpenRouter) + a system prompt for more reliable JSON
 - **JSON structure validation**: Automatic warnings for invalid nodes/tags/connections or unknown node types
 - **Input sanitization**: Basic prompt-injection protection before sending to the AI
+- **Template references**: A curated set of third-party n8n workflow collections for inspiration
 
 ## Getting Started
 
@@ -64,7 +67,7 @@ The build output lands in the `dist/` folder — open it directly or host it on 
 
 1. Write the description of the workflow you want
 2. Pick an AI provider and enter your API key (if required)
-3. Set the options (workflow name, n8n version, complexity, language)
+3. Set the options (workflow name, complexity, language)
 4. Click **Generate workflow JSON**
 5. Copy or download the resulting JSON
 6. Import the `.json` file into n8n
@@ -125,17 +128,33 @@ Click **Import to n8n**. The workflow is created via the `POST /api/v1/workflows
 ├── vite.config.js
 ├── tailwind.config.js
 ├── postcss.config.js
-├── src/
-│   ├── main.jsx            # React entry point
-│   ├── App.jsx             # Main component (state + layout)
-│   ├── index.css           # All CSS (vanilla + tailwind directives)
-│   ├── components/
-│   │   ├── Header.jsx
-│   │   └── Hero.jsx
-│   └── lib/
-│       ├── providers.js    # Definitions for the 5 AI providers
-│       ├── examples.js     # Quick-example templates
-│       ├── getNodeClass.js # n8n node classification
-│       └── pipeline.js     # 5-layer pipeline (sanitize → prompt → clean → repair → validate) + optional import to n8n
-└── n8n_workflow_generator_v2.html  # Reference to the old version (CDN-only)
+├── eslint.config.js
+├── public/
+│   └── favicon.svg
+├── scripts/
+│   ├── test-generation.mjs # Smoke test for the generation pipeline (no API key)
+│   └── test-providers.mjs  # Provider connectivity check (uses real API keys)
+└── src/
+    ├── main.jsx            # React entry point
+    ├── App.jsx             # Main component (state + layout)
+    ├── index.css           # All CSS (vanilla + tailwind directives)
+    ├── components/
+    │   ├── Header.jsx          # Header: brand, language switch, theme toggle
+    │   ├── Hero.jsx            # Hero/title section
+    │   ├── WorkflowPreview.jsx # Node & connection diagram (SVG, dependency-free)
+    │   ├── References.jsx      # List of third-party n8n template collections
+    │   └── Footer.jsx          # Footer + social links
+    └── lib/
+        ├── providers.js          # Definitions for the 5 AI providers (request, parse, models)
+        ├── modelCatalog.js       # Live model-list fetching + localStorage cache
+        ├── examples.js           # Quick-example templates
+        ├── references.js         # Reference template-collection data
+        ├── n8nNodes.js           # n8n node catalog for node-type validation
+        ├── getNodeClass.js       # Node classification (trigger/logic/action)
+        ├── i18n.jsx              # ID/EN translations + LanguageProvider
+        ├── useTheme.js           # Light/dark theme hook
+        ├── useWorkflowGeneration.js # Generate/refine + history hook
+        ├── useN8nImport.js       # Direct import-to-n8n hook (optional)
+        ├── pipeline.js           # 5-layer pipeline (sanitize → prompt → clean → repair → validate) + optional import to n8n
+        └── pipeline.test.js      # Unit tests for the pipeline
 ```
