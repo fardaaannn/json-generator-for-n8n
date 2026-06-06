@@ -185,6 +185,36 @@ describe('validateStructure', () => {
     expect(validateStructure(wf)).toContain('warnDupId')
   })
 
+  it('warns about duplicate node names', () => {
+    const wf = {
+      ...validWorkflow,
+      nodes: [
+        { id: '1', name: 'Same', type: 'n8n-nodes-base.webhook', position: [0, 0], parameters: {} },
+        { id: '2', name: 'Same', type: 'n8n-nodes-base.httpRequest', position: [1, 1], parameters: {} },
+      ],
+      connections: {},
+    }
+    expect(validateStructure(wf)).toContain('warnDupName')
+  })
+
+  it('does not throw and flags null/non-object node entries instead', () => {
+    const wf = {
+      ...validWorkflow,
+      nodes: [
+        { id: '1', name: 'Real', type: 'n8n-nodes-base.webhook', position: [0, 0], parameters: {} },
+        null,
+        'oops',
+      ],
+      connections: {},
+    }
+    let warnings
+    expect(() => { warnings = validateStructure(wf) }).not.toThrow()
+    // Two malformed entries (null and a string) → two warnings.
+    expect(warnings.filter((w) => w === 'warnNodeNotObject')).toHaveLength(2)
+    // The valid node is still processed normally (no missing-field warnings).
+    expect(warnings).not.toContain('warnNodeNoId')
+  })
+
   it('warns about a malformed node type with no namespace dot', () => {
     const wf = {
       ...validWorkflow,
