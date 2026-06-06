@@ -1,7 +1,11 @@
 import { isLikelyUnknownNodeType } from './n8nNodes.js';
 
 const MAX_DESC = 2000;
-const REQUEST_TIMEOUT_MS = 90000;
+// Client-side request timeout. Generous on purpose: reasoning models (and big
+// workflows) can legitimately take well over a minute, so a too-tight limit
+// would abort requests that were about to succeed. Callers can still override
+// it via sendRequest(..., { timeout }).
+const REQUEST_TIMEOUT_MS = 120000;
 
 const fallbackT = (key, params) => {
   let str = key;
@@ -199,6 +203,92 @@ export async function sendRequest(req, t = fallbackT, { timeout = REQUEST_TIMEOU
   }
 
   return res.json();
+}
+
+// Merge two connection entries (used when an id-keyed and a name-keyed entry
+// collapse onto the same node after normalization — rare, but we don't want to
+// silently drop either one). Group arrays are concatenated per output index.
+function mergeConnectionEntries(a, b) {
+  if (!a || typeof a !== 'object' || Array.isArray(a)) return b;
+  if (!b || typeof b !== 'object' || Array.isArray(b)) return a;
+  const out = { ...a };
+  for (const key of Object.keys(b)) {
+    const av = out[key];
+    const bv = b[key];
+    if (Array.isArray(av) && Array.isArray(bv)) {
+      const len = Math.max(av.length, bv.length);
+      const merged = [];
+      for (let i = 0; i < len; i++) {
+        const ag = Array.isArray(av[i]) ? av[i] : [];
+        const bg = Array.isArray(bv[i]) ? bv[i] : [];
+        merged.push([...ag, ...bg]);
+      }
+      out[key] = merged;
+    } else {
+      out[key] = bv;
+    }
+  }
+  return out;
+}
+
+/**
+ * n8n keys `connections` by node NAME and references each target by NAME. Some
+ * models instead emit connections keyed/targeted by node ID (e.g. "http-1"),
+ * which produces a workflow that imports with broken links and renders as a set
+ * of disconnected nodes in the preview. This rewrites any id-based source keys
+ * and target refs back to the matching node name, leaving already-correct
+ * (name-based) links untouched. Mutates and returns the workflow.
+ */
+export function normalizeConnections(workflow) {
+  if (!workflow || typeof workflow !== 'object') return workflow;
+  const conns = workflow.connections;
+  if (!conns || typeof conns !== 'object' || Array.isArray(conns)) return workflow;
+
+  const nodes = Array.isArray(workflow.nodes) ? workflow.nodes : [];
+  const names = new Set();
+  const idToName = new Map();
+  for (const n of nodes) {
+    if (n && typeof n.name === 'string') {
+      names.add(n.name);
+      if (n.id != null && !idToName.has(String(n.id))) idToName.set(String(n.id), n.name);
+    }
+  }
+
+  // A reference is kept as-is when it's already a valid node name; if instead it
+  // matches a node id, map it to that node's name; otherwise leave it untouched.
+  const resolve = (ref) => {
+    if (typeof ref !== 'string') return ref;
+    if (names.has(ref)) return ref;
+    if (idToName.has(ref)) return idToName.get(ref);
+    return ref;
+  };
+
+  const remapOutputs = (outputs) => {
+    if (!outputs || typeof outputs !== 'object' || Array.isArray(outputs)) return outputs;
+    const next = {};
+    for (const outName of Object.keys(outputs)) {
+      const groups = outputs[outName];
+      next[outName] = Array.isArray(groups)
+        ? groups.map((group) => (Array.isArray(group)
+            ? group.map((target) => ((target && typeof target === 'object' && typeof target.node === 'string')
+                ? { ...target, node: resolve(target.node) }
+                : target))
+            : group))
+        : groups;
+    }
+    return next;
+  };
+
+  const next = {};
+  for (const sourceKey of Object.keys(conns)) {
+    const resolvedSource = resolve(sourceKey);
+    const remapped = remapOutputs(conns[sourceKey]);
+    next[resolvedSource] = next[resolvedSource]
+      ? mergeConnectionEntries(next[resolvedSource], remapped)
+      : remapped;
+  }
+  workflow.connections = next;
+  return workflow;
 }
 
 export function validateStructure(parsed, t = fallbackT) {

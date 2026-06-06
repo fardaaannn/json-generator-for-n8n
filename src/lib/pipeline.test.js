@@ -5,6 +5,7 @@ import {
   buildRefinePrompt,
   cleanOutput,
   repairJSON,
+  normalizeConnections,
   validateStructure,
 } from './pipeline.js'
 
@@ -232,5 +233,82 @@ describe('validateStructure', () => {
       connections: { Webhook: { main: [[{ node: 'Nowhere', type: 'main', index: 0 }]] } },
     }
     expect(validateStructure(wf)).toContain('warnConnUnknownTarget')
+  })
+})
+
+
+describe('normalizeConnections', () => {
+  // Mirrors the real-world bug: connections keyed/targeted by node id instead
+  // of node name, which leaves the preview/import with no links.
+  const idBasedWorkflow = () => ({
+    nodes: [
+      { id: 'schedule-1', name: 'Jadwal Harian', type: 'n8n-nodes-base.scheduleTrigger' },
+      { id: 'http-1', name: 'Ambil Data', type: 'n8n-nodes-base.httpRequest' },
+      { id: 'set-1', name: 'Ekstrak Field', type: 'n8n-nodes-base.set' },
+    ],
+    connections: {
+      'schedule-1': { main: [[{ node: 'http-1', index: 0 }]] },
+      'http-1': { main: [[{ node: 'set-1', index: 0 }]] },
+    },
+  })
+
+  it('rewrites id-based source keys to node names', () => {
+    const wf = normalizeConnections(idBasedWorkflow())
+    expect(Object.keys(wf.connections).sort()).toEqual(['Ambil Data', 'Jadwal Harian'])
+    expect(wf.connections['schedule-1']).toBeUndefined()
+  })
+
+  it('rewrites id-based target references to node names', () => {
+    const wf = normalizeConnections(idBasedWorkflow())
+    expect(wf.connections['Jadwal Harian'].main[0][0].node).toBe('Ambil Data')
+    expect(wf.connections['Ambil Data'].main[0][0].node).toBe('Ekstrak Field')
+  })
+
+  it('makes an id-based workflow pass connection validation', () => {
+    const wf = normalizeConnections(idBasedWorkflow())
+    const warnings = validateStructure(wf)
+    expect(warnings).not.toContain('warnConnUnknownSource')
+    expect(warnings).not.toContain('warnConnUnknownTarget')
+  })
+
+  it('leaves already name-based connections untouched', () => {
+    const wf = {
+      nodes: [
+        { id: '1', name: 'Webhook', type: 'n8n-nodes-base.webhook' },
+        { id: '2', name: 'HTTP', type: 'n8n-nodes-base.httpRequest' },
+      ],
+      connections: { Webhook: { main: [[{ node: 'HTTP', type: 'main', index: 0 }]] } },
+    }
+    const out = normalizeConnections(wf)
+    expect(out.connections.Webhook.main[0][0].node).toBe('HTTP')
+    expect(out.connections.HTTP).toBeUndefined()
+  })
+
+  it('preserves the connection type field and extra props on targets', () => {
+    const wf = {
+      nodes: [
+        { id: 'a', name: 'A', type: 'n8n-nodes-base.if' },
+        { id: 'b', name: 'B', type: 'n8n-nodes-base.noOp' },
+      ],
+      connections: { a: { main: [[{ node: 'b', type: 'main', index: 0 }]] } },
+    }
+    const out = normalizeConnections(wf)
+    expect(out.connections.A.main[0][0]).toEqual({ node: 'B', type: 'main', index: 0 })
+  })
+
+  it('is robust to missing/empty/malformed connections', () => {
+    expect(normalizeConnections(null)).toBeNull()
+    expect(normalizeConnections({}).connections).toBeUndefined()
+    const arrConns = { nodes: [], connections: [] }
+    expect(normalizeConnections(arrConns).connections).toEqual([])
+  })
+
+  it('leaves references that match neither a name nor an id untouched', () => {
+    const wf = {
+      nodes: [{ id: '1', name: 'Real', type: 'n8n-nodes-base.set' }],
+      connections: { Real: { main: [[{ node: 'Ghost', type: 'main', index: 0 }]] } },
+    }
+    const out = normalizeConnections(wf)
+    expect(out.connections.Real.main[0][0].node).toBe('Ghost')
   })
 })
