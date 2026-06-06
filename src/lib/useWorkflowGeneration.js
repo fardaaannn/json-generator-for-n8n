@@ -4,10 +4,12 @@ import {
   sanitizeInput,
   buildPrompt,
   buildRefinePrompt,
+  buildRepairPrompt,
   cleanOutput,
   repairJSON,
   normalizeConnections,
   validateStructure,
+  maxTokensFor,
   sendRequest,
   SYSTEM_PROMPT,
 } from './pipeline'
@@ -114,11 +116,15 @@ export function useWorkflowGeneration({ t, onRunStart }) {
     return null
   }, [t])
 
-  // The shared request → extract → clean → repair → apply path.
+  // The shared request → extract → clean → repair → (self-heal) → apply path.
   const runRequest = useCallback(async ({ prompt, config, setBusy, onSuccess }) => {
     const cfg = PROVIDERS[config.provider]
     const effectiveModel = config.selectedModel === '__custom__' ? config.customModel : config.selectedModel
     const baseUrlValue = config.provider === 'custom' ? config.baseUrl : undefined
+    // Scale the output token budget to complexity so larger workflows don't get
+    // truncated mid-JSON. Self-heal is on unless explicitly disabled.
+    const maxTokens = config.maxTokens || maxTokensFor(config.complexity)
+    const autoFix = config.autoFix !== false
 
     setBusy(true)
     setErrorMsg('')
@@ -129,14 +135,41 @@ export function useWorkflowGeneration({ t, onRunStart }) {
     setStatus({ state: 'active', key: 'statusGenerating', params: {} })
 
     try {
-      const req = cfg.buildRequest(effectiveModel, prompt, config.apiKey, baseUrlValue, SYSTEM_PROMPT, config.maxTokens)
+      const req = cfg.buildRequest(effectiveModel, prompt, config.apiKey, baseUrlValue, SYSTEM_PROMPT, maxTokens)
       const data = await sendRequest(req, t)
-      let raw = cfg.extract(data)
-      raw = cleanOutput(raw)
-      const { value: parsed, repaired } = repairJSON(raw, t)
+      const first = repairJSON(cleanOutput(cfg.extract(data)), t)
+      let parsed = first.value
+      let repaired = first.repaired
       // Fix connections that reference node ids instead of names (some models
       // do this), so links survive import and render in the preview.
       normalizeConnections(parsed)
+      let resultWarnings = validateStructure(parsed, t)
+
+      // Self-heal: if the first result has validation issues, ask the model
+      // ONCE to fix exactly those issues, then keep whichever result is cleaner.
+      // Best-effort — a heal failure leaves the original result untouched.
+      if (autoFix && resultWarnings.length > 0) {
+        setStatus({ state: 'active', key: 'statusFixing', params: {} })
+        try {
+          const fixPrompt = buildRepairPrompt({
+            currentJSON: JSON.stringify(parsed),
+            warnings: resultWarnings,
+            version: N8N_VERSION,
+            lang: config.lang,
+          })
+          const fixReq = cfg.buildRequest(effectiveModel, fixPrompt, config.apiKey, baseUrlValue, SYSTEM_PROMPT, maxTokens)
+          const fixData = await sendRequest(fixReq, t)
+          const healed = repairJSON(cleanOutput(cfg.extract(fixData)), t)
+          normalizeConnections(healed.value)
+          const healedWarnings = validateStructure(healed.value, t)
+          if (healedWarnings.length < resultWarnings.length) {
+            parsed = healed.value
+            repaired = repaired || healed.repaired
+            resultWarnings = healedWarnings
+          }
+        } catch (e) { /* heal is best-effort; keep the original result */ }
+      }
+
       const pretty = JSON.stringify(parsed, null, 2)
       applyResult(parsed, pretty, repaired)
       if (onSuccess) onSuccess(parsed)

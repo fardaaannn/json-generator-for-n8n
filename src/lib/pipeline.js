@@ -69,11 +69,45 @@ const COMPLEXITY_DESC = {
 // guardrail against runaway output (and truncation), not a hard limit. A
 // "complex" workflow with error handling + IF branches + sticky notes would hit
 // a flat cap of 12 almost immediately, so the cap grows with complexity.
-const NODE_CAP = { simple: 6, medium: 12, complex: 20 };
+const NODE_CAP = { simple: 6, medium: 12, complex: 30 };
 
 export function nodeCapFor(complexity) {
   return NODE_CAP[complexity] || NODE_CAP.medium;
 }
+
+// Output token budget scaled to complexity. The node cap is meaningless if the
+// response gets truncated mid-JSON, so the budget grows together with the cap:
+// a ~30-node "complex" workflow needs far more than the 8k default. Paired with
+// nodeCapFor() and passed to each provider's buildRequest as `maxTokens`.
+const TOKEN_BUDGET = { simple: 4000, medium: 8000, complex: 16000 };
+
+export function maxTokensFor(complexity) {
+  return TOKEN_BUDGET[complexity] || TOKEN_BUDGET.medium;
+}
+
+// A compact but fully valid workflow, used as a one-shot example in the prompt.
+// Showing the model a real, correct workflow — connections keyed by node NAME,
+// the main[][] nesting, position arrays, realistic parameters (incl. an n8n
+// expression), and the required top-level keys — lifts structural validity far
+// more than describing the shape in prose alone. Built as an object and
+// stringified so it is guaranteed to be valid JSON.
+const EXAMPLE_WORKFLOW = {
+  name: 'Example: Daily API Check',
+  nodes: [
+    { id: 'a1', name: 'Daily Schedule', type: 'n8n-nodes-base.scheduleTrigger', position: [240, 300], parameters: { rule: { interval: [{ field: 'hours', hoursInterval: 24 }] } } },
+    { id: 'b2', name: 'Fetch Data', type: 'n8n-nodes-base.httpRequest', position: [460, 300], parameters: { url: 'https://api.example.com/data', method: 'GET' } },
+    { id: 'c3', name: 'Build Result', type: 'n8n-nodes-base.set', position: [680, 300], parameters: { assignments: { assignments: [{ id: 'f1', name: 'status', value: '={{ $json.status }}', type: 'string' }] } } },
+  ],
+  connections: {
+    'Daily Schedule': { main: [[{ node: 'Fetch Data', type: 'main', index: 0 }]] },
+    'Fetch Data': { main: [[{ node: 'Build Result', type: 'main', index: 0 }]] },
+  },
+  active: false,
+  settings: {},
+  id: 'example-workflow',
+};
+
+export const EXAMPLE_JSON = JSON.stringify(EXAMPLE_WORKFLOW);
 
 export function buildPrompt({description, name, version, complexity, lang}) {
   const L = lang === 'en' ? 'en' : 'id';
@@ -98,6 +132,9 @@ REQUIREMENTS:
 - Use node types valid for n8n ${version}
 - Every node must have a unique id, a descriptive name, the correct type, and a position (x,y)
 - Create correct connections between nodes
+
+EXAMPLE (format reference only — do NOT copy its content, follow the structure):
+${EXAMPLE_JSON}
 
 OUTPUT FORMAT:
 Output valid JSON only, with no explanation, no markdown code block, no backticks.
@@ -129,6 +166,9 @@ REQUIREMENTS:
 - Gunakan node types yang valid untuk n8n ${version}
 - Setiap node harus memiliki id unik, nama deskriptif, type yang benar, dan posisi (x,y)
 - Buat connections yang benar antar node
+
+CONTOH (acuan format saja — JANGAN tiru isinya, ikuti strukturnya):
+${EXAMPLE_JSON}
 
 FORMAT OUTPUT:
 Langsung output JSON valid saja, tanpa penjelasan, tanpa markdown code block, tanpa backtick.
@@ -208,6 +248,57 @@ WAJIB:
 - Output ONLY the full modified workflow as valid JSON, no markdown/backticks
 - Top-level keys: name, nodes, connections, active, settings
 - Setiap node harus memiliki: id, name, type, position, parameters`;
+}
+
+/**
+ * Build a self-heal prompt: hand the model the workflow it just produced plus
+ * the concrete validation issues we detected, and ask it to return the entire
+ * corrected workflow. The warnings are passed as-is (already human-readable,
+ * possibly localized) — that is exactly the actionable feedback the model needs.
+ */
+export function buildRepairPrompt({ currentJSON, warnings, version, lang }) {
+  const L = lang === 'en' ? 'en' : 'id';
+  const issues = (Array.isArray(warnings) ? warnings : []).map((w) => '- ' + w).join('\n');
+
+  if (L === 'en') {
+    return `You are an expert n8n workflow builder. The workflow JSON below has validation issues. Fix ALL of them and return the ENTIRE corrected workflow JSON.
+
+<workflow>
+${currentJSON}
+</workflow>
+
+ISSUES TO FIX:
+${issues}
+
+RULES:
+- Target n8n version: ${version}
+- "connections" must be keyed by node NAME and only reference node names that exist
+- every node needs a unique id, a descriptive name, a valid "namespace.node" type, a position [x,y], and parameters
+- do not drop nodes unless they are invalid; prefer wiring orphan nodes into the flow
+- keep everything that was already correct unchanged
+
+OUTPUT FORMAT:
+Output valid JSON only — no explanation, no markdown, no backticks. Start with { and end with }.`;
+  }
+
+  return `Kamu adalah expert n8n workflow builder. Workflow JSON di bawah ini punya masalah validasi. Perbaiki SEMUA masalah tersebut lalu kembalikan KESELURUHAN workflow JSON hasil perbaikan.
+
+<workflow>
+${currentJSON}
+</workflow>
+
+MASALAH YANG HARUS DIPERBAIKI:
+${issues}
+
+ATURAN:
+- Target versi n8n: ${version}
+- "connections" harus di-key berdasarkan NAMA node dan hanya merujuk nama node yang ada
+- setiap node wajib punya id unik, nama deskriptif, type "namespace.node" yang valid, posisi [x,y], dan parameters
+- jangan hapus node kecuali memang tidak valid; lebih baik sambungkan node yatim ke alur
+- pertahankan semua yang sudah benar
+
+FORMAT OUTPUT:
+Langsung output JSON valid saja — tanpa penjelasan, tanpa markdown, tanpa backtick. Dimulai dengan { dan diakhiri dengan }.`;
 }
 
 /**

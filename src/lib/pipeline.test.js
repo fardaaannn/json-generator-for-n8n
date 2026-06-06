@@ -3,11 +3,14 @@ import {
   sanitizeInput,
   buildPrompt,
   buildRefinePrompt,
+  buildRepairPrompt,
   cleanOutput,
   repairJSON,
   normalizeConnections,
   validateStructure,
   nodeCapFor,
+  maxTokensFor,
+  EXAMPLE_JSON,
 } from './pipeline.js'
 
 describe('sanitizeInput', () => {
@@ -87,7 +90,7 @@ describe('buildPrompt', () => {
   it('scales the node cap with complexity instead of a fixed 12', () => {
     expect(buildPrompt({ ...base, complexity: 'simple' })).toContain('6 nodes')
     expect(buildPrompt({ ...base, complexity: 'medium' })).toContain('12 nodes')
-    expect(buildPrompt({ ...base, complexity: 'complex' })).toContain('20 nodes')
+    expect(buildPrompt({ ...base, complexity: 'complex' })).toContain('30 nodes')
   })
 })
 
@@ -95,12 +98,72 @@ describe('nodeCapFor', () => {
   it('returns a cap that grows with complexity', () => {
     expect(nodeCapFor('simple')).toBe(6)
     expect(nodeCapFor('medium')).toBe(12)
-    expect(nodeCapFor('complex')).toBe(20)
+    expect(nodeCapFor('complex')).toBe(30)
   })
 
   it('falls back to the medium cap for unknown complexity', () => {
     expect(nodeCapFor('nonsense')).toBe(12)
     expect(nodeCapFor(undefined)).toBe(12)
+  })
+})
+
+describe('maxTokensFor', () => {
+  it('grows the token budget with complexity', () => {
+    expect(maxTokensFor('simple')).toBe(4000)
+    expect(maxTokensFor('medium')).toBe(8000)
+    expect(maxTokensFor('complex')).toBe(16000)
+  })
+
+  it('falls back to the medium budget for unknown complexity', () => {
+    expect(maxTokensFor('nonsense')).toBe(8000)
+    expect(maxTokensFor(undefined)).toBe(8000)
+  })
+})
+
+describe('few-shot example', () => {
+  it('exposes a valid, parseable example workflow', () => {
+    const wf = JSON.parse(EXAMPLE_JSON)
+    expect(Array.isArray(wf.nodes)).toBe(true)
+    expect(wf.nodes.length).toBeGreaterThan(0)
+    // The example must itself pass structural validation (no warnings) so we
+    // never teach the model a broken shape.
+    expect(validateStructure(wf)).toEqual([])
+  })
+
+  it('embeds the example in the generated prompt as a format reference', () => {
+    const idPrompt = buildPrompt({ description: 'x', name: 'n', version: '1.x', complexity: 'medium', lang: 'id' })
+    const enPrompt = buildPrompt({ description: 'x', name: 'n', version: '1.x', complexity: 'medium', lang: 'en' })
+    expect(idPrompt).toContain('CONTOH')
+    expect(enPrompt).toContain('EXAMPLE')
+    expect(idPrompt).toContain(EXAMPLE_JSON)
+    expect(enPrompt).toContain(EXAMPLE_JSON)
+  })
+})
+
+describe('buildRepairPrompt', () => {
+  const args = {
+    currentJSON: '{"name":"X","nodes":[]}',
+    warnings: ['A connection references a target node that does not exist: Ghost'],
+    version: '1.x',
+    lang: 'en',
+  }
+
+  it('includes the workflow and the concrete issues to fix', () => {
+    const prompt = buildRepairPrompt(args)
+    expect(prompt).toContain('<workflow>')
+    expect(prompt).toContain('{"name":"X","nodes":[]}')
+    expect(prompt).toContain('does not exist: Ghost')
+    expect(prompt).toContain('ISSUES TO FIX:')
+  })
+
+  it('builds the Indonesian variant when lang is id', () => {
+    const prompt = buildRepairPrompt({ ...args, lang: 'id' })
+    expect(prompt).toContain('MASALAH YANG HARUS DIPERBAIKI:')
+    expect(prompt).not.toContain('ISSUES TO FIX:')
+  })
+
+  it('tolerates a missing/empty warnings list', () => {
+    expect(() => buildRepairPrompt({ ...args, warnings: undefined })).not.toThrow()
   })
 })
 

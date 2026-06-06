@@ -82,6 +82,7 @@ export const translations = {
     // Status
     statusReady: 'Siap',
     statusGenerating: 'Membuat workflow...',
+    statusFixing: 'Memperbaiki hasil...',
     statusDone: 'Selesai — {n} nodes',
     statusDoneWarn: 'Selesai — {n} nodes (ada peringatan)',
     statusError: 'Error',
@@ -230,6 +231,7 @@ export const translations = {
     // Status
     statusReady: 'Ready',
     statusGenerating: 'Generating workflow...',
+    statusFixing: 'Repairing output...',
     statusDone: 'Done — {n} nodes',
     statusDoneWarn: 'Done — {n} nodes (with warnings)',
     statusError: 'Error',
