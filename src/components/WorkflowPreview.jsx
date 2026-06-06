@@ -1,123 +1,21 @@
 import { useMemo } from 'react'
-import { getNodeClass } from '../lib/getNodeClass'
-
-const NODE_W = 150
-const NODE_H = 52
-const GAP_X = 56
-const GAP_Y = 22
-const PAD = 16
-
-function shortType(type) {
-  if (!type) return 'node'
-  const parts = String(type).split('.')
-  return parts[parts.length - 1] || type
-}
+import {
+  NODE_W,
+  NODE_H,
+  computeLayout,
+  nodeAriaLabel,
+  summaryAriaLabel,
+} from '../lib/workflowLayout'
 
 /**
- * Lightweight, dependency-free visual preview of an n8n workflow.
- * Lays nodes out left-to-right in columns derived from the connection graph
- * (longest-path levelling), and draws edges as SVG bezier curves. Falls back
- * gracefully for isolated nodes, missing names, and cyclic graphs.
+ * Lightweight, dependency-free visual preview of an n8n workflow. The layout
+ * math and accessibility wording live in lib/workflowLayout.js (pure +
+ * unit-tested); this component only renders the result.
+ *
+ * Accessibility: the diagram is exposed as a labelled group/list whose items
+ * (the nodes) are focusable and self-describing, so keyboard and screen-reader
+ * users can traverse the workflow. The decorative SVG edges stay aria-hidden.
  */
-function computeLayout(workflow) {
-  const nodes = Array.isArray(workflow?.nodes) ? workflow.nodes : []
-  if (nodes.length === 0) return null
-
-  // Map by name (connections key on names); keep a stable key per node.
-  const keyOf = (n, i) => n.name || n.id || ('node-' + i)
-  const order = nodes.map((n, i) => keyOf(n, i))
-  const byKey = new Map()
-  nodes.forEach((n, i) => byKey.set(keyOf(n, i), n))
-
-  // Build adjacency (source -> [targets]) from connections.
-  const adj = new Map(order.map((k) => [k, []]))
-  const indeg = new Map(order.map((k) => [k, 0]))
-  const conns = (workflow.connections && typeof workflow.connections === 'object' && !Array.isArray(workflow.connections))
-    ? workflow.connections : {}
-
-  for (const source of Object.keys(conns)) {
-    if (!byKey.has(source)) continue
-    const outputs = conns[source] || {}
-    for (const outName of Object.keys(outputs)) {
-      const groups = outputs[outName]
-      if (!Array.isArray(groups)) continue
-      for (const group of groups) {
-        if (!Array.isArray(group)) continue
-        for (const target of group) {
-          const tName = target && target.node
-          if (tName && byKey.has(tName) && tName !== source) {
-            adj.get(source).push(tName)
-            indeg.set(tName, (indeg.get(tName) || 0) + 1)
-          }
-        }
-      }
-    }
-  }
-
-  // Longest-path levelling (cap iterations to stay safe on cycles).
-  const level = new Map(order.map((k) => [k, 0]))
-  const maxIter = order.length + 1
-  for (let iter = 0; iter < maxIter; iter++) {
-    let changed = false
-    for (const src of order) {
-      const base = level.get(src)
-      for (const tgt of adj.get(src)) {
-        if (level.get(tgt) < base + 1) {
-          level.set(tgt, base + 1)
-          changed = true
-        }
-      }
-    }
-    if (!changed) break
-  }
-
-  // Group by level, assign a row index per column.
-  const columns = new Map()
-  for (const k of order) {
-    const lv = level.get(k)
-    if (!columns.has(lv)) columns.set(lv, [])
-    columns.get(lv).push(k)
-  }
-
-  const pos = new Map()
-  let maxRows = 0
-  for (const [lv, keys] of columns) {
-    keys.forEach((k, row) => {
-      pos.set(k, {
-        x: PAD + lv * (NODE_W + GAP_X),
-        y: PAD + row * (NODE_H + GAP_Y),
-      })
-    })
-    maxRows = Math.max(maxRows, keys.length)
-  }
-
-  const levels = Math.max(...Array.from(columns.keys())) + 1
-  const width = PAD * 2 + levels * NODE_W + (levels - 1) * GAP_X
-  const height = PAD * 2 + maxRows * NODE_H + (maxRows - 1) * GAP_Y
-
-  const edges = []
-  for (const src of order) {
-    for (const tgt of adj.get(src)) {
-      const a = pos.get(src)
-      const b = pos.get(tgt)
-      if (a && b) edges.push({ from: src, to: tgt, a, b })
-    }
-  }
-
-  const boxes = order.map((k) => {
-    const n = byKey.get(k)
-    return {
-      key: k,
-      name: n.name || shortType(n.type) || k,
-      type: shortType(n.type),
-      cls: getNodeClass(n.type),
-      ...pos.get(k),
-    }
-  })
-
-  return { boxes, edges, width: Math.max(width, 240), height: Math.max(height, NODE_H + PAD * 2) }
-}
-
 export default function WorkflowPreview({ workflow, t }) {
   const layout = useMemo(() => computeLayout(workflow), [workflow])
 
@@ -126,10 +24,12 @@ export default function WorkflowPreview({ workflow, t }) {
   }
 
   const { boxes, edges, width, height } = layout
+  const tr = t || ((k) => k)
+  const groupLabel = `${tr('previewAria')}: ${summaryAriaLabel(layout, tr)}`
 
   return (
-    <div className="wf-preview" role="img" aria-label={t ? t('previewAria') : 'Workflow diagram'}>
-      <div className="wf-canvas" style={{ width, height }}>
+    <div className="wf-preview" role="group" aria-label={groupLabel}>
+      <div className="wf-canvas" style={{ width, height }} role="list">
         <svg className="wf-edges" width={width} height={height} aria-hidden="true">
           {edges.map((e, i) => {
             const x1 = e.a.x + NODE_W
@@ -152,10 +52,13 @@ export default function WorkflowPreview({ workflow, t }) {
             key={b.key}
             className={'wf-node ' + b.cls}
             style={{ left: b.x, top: b.y, width: NODE_W, height: NODE_H }}
+            role="listitem"
+            tabIndex={0}
+            aria-label={nodeAriaLabel(b, tr)}
             title={b.name + ' (' + b.type + ')'}
           >
-            <span className="wf-node-name">{b.name}</span>
-            <span className="wf-node-type">{b.type}</span>
+            <span className="wf-node-name" aria-hidden="true">{b.name}</span>
+            <span className="wf-node-type" aria-hidden="true">{b.type}</span>
           </div>
         ))}
       </div>
