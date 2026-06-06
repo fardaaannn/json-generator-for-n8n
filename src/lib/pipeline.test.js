@@ -3,10 +3,14 @@ import {
   sanitizeInput,
   buildPrompt,
   buildRefinePrompt,
+  buildRepairPrompt,
   cleanOutput,
   repairJSON,
   normalizeConnections,
   validateStructure,
+  nodeCapFor,
+  maxTokensFor,
+  EXAMPLE_JSON,
 } from './pipeline.js'
 
 describe('sanitizeInput', () => {
@@ -72,6 +76,94 @@ describe('buildPrompt', () => {
   it('selects the comment language label from the lang flag', () => {
     expect(buildPrompt({ ...base, lang: 'id' })).toContain('Indonesia')
     expect(buildPrompt({ ...base, lang: 'en' })).toContain('English')
+  })
+
+  it('builds the whole prompt scaffolding in English when lang is en', () => {
+    const prompt = buildPrompt({ ...base, lang: 'en' })
+    expect(prompt).toContain('You are an expert n8n workflow builder')
+    expect(prompt).toContain('OUTPUT FORMAT:')
+    expect(prompt).toContain('Build a complete workflow') // medium, English
+    // and not the Indonesian scaffolding
+    expect(prompt).not.toContain('Kamu adalah expert')
+  })
+
+  it('scales the node cap with complexity instead of a fixed 12', () => {
+    expect(buildPrompt({ ...base, complexity: 'simple' })).toContain('6 nodes')
+    expect(buildPrompt({ ...base, complexity: 'medium' })).toContain('12 nodes')
+    expect(buildPrompt({ ...base, complexity: 'complex' })).toContain('30 nodes')
+  })
+})
+
+describe('nodeCapFor', () => {
+  it('returns a cap that grows with complexity', () => {
+    expect(nodeCapFor('simple')).toBe(6)
+    expect(nodeCapFor('medium')).toBe(12)
+    expect(nodeCapFor('complex')).toBe(30)
+  })
+
+  it('falls back to the medium cap for unknown complexity', () => {
+    expect(nodeCapFor('nonsense')).toBe(12)
+    expect(nodeCapFor(undefined)).toBe(12)
+  })
+})
+
+describe('maxTokensFor', () => {
+  it('grows the token budget with complexity', () => {
+    expect(maxTokensFor('simple')).toBe(4000)
+    expect(maxTokensFor('medium')).toBe(8000)
+    expect(maxTokensFor('complex')).toBe(16000)
+  })
+
+  it('falls back to the medium budget for unknown complexity', () => {
+    expect(maxTokensFor('nonsense')).toBe(8000)
+    expect(maxTokensFor(undefined)).toBe(8000)
+  })
+})
+
+describe('few-shot example', () => {
+  it('exposes a valid, parseable example workflow', () => {
+    const wf = JSON.parse(EXAMPLE_JSON)
+    expect(Array.isArray(wf.nodes)).toBe(true)
+    expect(wf.nodes.length).toBeGreaterThan(0)
+    // The example must itself pass structural validation (no warnings) so we
+    // never teach the model a broken shape.
+    expect(validateStructure(wf)).toEqual([])
+  })
+
+  it('embeds the example in the generated prompt as a format reference', () => {
+    const idPrompt = buildPrompt({ description: 'x', name: 'n', version: '1.x', complexity: 'medium', lang: 'id' })
+    const enPrompt = buildPrompt({ description: 'x', name: 'n', version: '1.x', complexity: 'medium', lang: 'en' })
+    expect(idPrompt).toContain('CONTOH')
+    expect(enPrompt).toContain('EXAMPLE')
+    expect(idPrompt).toContain(EXAMPLE_JSON)
+    expect(enPrompt).toContain(EXAMPLE_JSON)
+  })
+})
+
+describe('buildRepairPrompt', () => {
+  const args = {
+    currentJSON: '{"name":"X","nodes":[]}',
+    warnings: ['A connection references a target node that does not exist: Ghost'],
+    version: '1.x',
+    lang: 'en',
+  }
+
+  it('includes the workflow and the concrete issues to fix', () => {
+    const prompt = buildRepairPrompt(args)
+    expect(prompt).toContain('<workflow>')
+    expect(prompt).toContain('{"name":"X","nodes":[]}')
+    expect(prompt).toContain('does not exist: Ghost')
+    expect(prompt).toContain('ISSUES TO FIX:')
+  })
+
+  it('builds the Indonesian variant when lang is id', () => {
+    const prompt = buildRepairPrompt({ ...args, lang: 'id' })
+    expect(prompt).toContain('MASALAH YANG HARUS DIPERBAIKI:')
+    expect(prompt).not.toContain('ISSUES TO FIX:')
+  })
+
+  it('tolerates a missing/empty warnings list', () => {
+    expect(() => buildRepairPrompt({ ...args, warnings: undefined })).not.toThrow()
   })
 })
 
@@ -263,6 +355,37 @@ describe('validateStructure', () => {
       connections: { Webhook: { main: [[{ node: 'Nowhere', type: 'main', index: 0 }]] } },
     }
     expect(validateStructure(wf)).toContain('warnConnUnknownTarget')
+  })
+
+  it('flags a non-trigger node that has no incoming or outgoing connection', () => {
+    const wf = {
+      name: 'wf',
+      nodes: [
+        { id: '1', name: 'Webhook', type: 'n8n-nodes-base.webhook', position: [0, 0], parameters: {} },
+        { id: '2', name: 'HTTP', type: 'n8n-nodes-base.httpRequest', position: [200, 0], parameters: {} },
+        { id: '3', name: 'Lonely', type: 'n8n-nodes-base.set', position: [400, 0], parameters: {} },
+      ],
+      connections: { Webhook: { main: [[{ node: 'HTTP', type: 'main', index: 0 }]] } },
+    }
+    expect(validateStructure(wf)).toContain('warnOrphanNode')
+  })
+
+  it('does not flag a trigger node for having no incoming connection', () => {
+    // Webhook is a trigger; it has an outgoing edge but the test guards that a
+    // trigger sitting at the start is never reported as orphan.
+    expect(validateStructure(validWorkflow)).not.toContain('warnOrphanNode')
+  })
+
+  it('does not flag orphans when the workflow has no connections at all', () => {
+    const wf = {
+      name: 'wf',
+      nodes: [
+        { id: '1', name: 'A', type: 'n8n-nodes-base.set', position: [0, 0], parameters: {} },
+        { id: '2', name: 'B', type: 'n8n-nodes-base.set', position: [200, 0], parameters: {} },
+      ],
+      connections: {},
+    }
+    expect(validateStructure(wf)).not.toContain('warnOrphanNode')
   })
 })
 

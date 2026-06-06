@@ -4,6 +4,12 @@
 // optional `maxTokens` override, falling back to this default.
 export const DEFAULT_MAX_TOKENS = 8000;
 
+// Low sampling temperature for structured-output generation. Workflow JSON is a
+// strict format, not creative prose: a near-deterministic temperature yields
+// far fewer format errors (broken brackets, stray prose, invalid types) than
+// the provider defaults (often ~1.0). Applied to every provider's request.
+export const DEFAULT_TEMPERATURE = 0.2;
+
 // Build the messages array, putting the system instruction in its own role
 // when provided (better steering than stuffing everything into the user turn).
 function buildMessages(prompt, system) {
@@ -50,6 +56,7 @@ export const PROVIDERS = {
         body: JSON.stringify({
           model,
           max_tokens: maxTokens,
+          temperature: DEFAULT_TEMPERATURE,
           ...(system ? { system } : {}),
           messages: [{role:'user', content: prompt}]
         })
@@ -80,6 +87,7 @@ export const PROVIDERS = {
         body: JSON.stringify({
           model,
           max_tokens: maxTokens,
+          temperature: DEFAULT_TEMPERATURE,
           messages: buildMessages(prompt, system),
           response_format: { type: 'json_object' }
         })
@@ -109,6 +117,7 @@ export const PROVIDERS = {
         body: JSON.stringify({
           model,
           max_tokens: maxTokens,
+          temperature: DEFAULT_TEMPERATURE,
           messages: buildMessages(prompt, system),
           response_format: { type: 'json_object' }
         })
@@ -139,6 +148,7 @@ export const PROVIDERS = {
         body: JSON.stringify({
           model,
           max_tokens: maxTokens,
+          temperature: DEFAULT_TEMPERATURE,
           messages: buildMessages(prompt, system),
           response_format: { type: 'json_object' }
         })
@@ -187,6 +197,7 @@ export const PROVIDERS = {
         body: JSON.stringify({
           model,
           max_tokens: maxTokens,
+          temperature: DEFAULT_TEMPERATURE,
           messages: buildMessages(prompt, system)
         })
       };
