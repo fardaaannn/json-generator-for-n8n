@@ -12,6 +12,7 @@ import {
   validateStructure,
   maxTokensFor,
   sendRequest,
+  isResponseFormatError,
   SYSTEM_PROMPT,
 } from './pipeline'
 import { diffWorkflows } from './workflowDiff'
@@ -135,9 +136,23 @@ export function useWorkflowGeneration({ t, onRunStart }) {
     if (onRunStart) onRunStart()
     setStatus({ state: 'active', key: 'statusGenerating', params: {} })
 
+    // Issue one model call, transparently retrying without response_format if
+    // the model/provider rejects JSON mode (common on some OpenRouter models).
+    const callModel = async (modelPrompt) => {
+      try {
+        const req = cfg.buildRequest(effectiveModel, modelPrompt, config.apiKey, baseUrlValue, SYSTEM_PROMPT, maxTokens)
+        return await sendRequest(req, t)
+      } catch (e) {
+        if (isResponseFormatError(e)) {
+          const req2 = cfg.buildRequest(effectiveModel, modelPrompt, config.apiKey, baseUrlValue, SYSTEM_PROMPT, maxTokens, { responseFormat: false })
+          return await sendRequest(req2, t)
+        }
+        throw e
+      }
+    }
+
     try {
-      const req = cfg.buildRequest(effectiveModel, prompt, config.apiKey, baseUrlValue, SYSTEM_PROMPT, maxTokens)
-      const data = await sendRequest(req, t)
+      const data = await callModel(prompt)
       const first = repairJSON(cleanOutput(cfg.extract(data)), t)
       let parsed = first.value
       let repaired = first.repaired
@@ -162,8 +177,7 @@ export function useWorkflowGeneration({ t, onRunStart }) {
             version: N8N_VERSION,
             lang: config.lang,
           })
-          const fixReq = cfg.buildRequest(effectiveModel, fixPrompt, config.apiKey, baseUrlValue, SYSTEM_PROMPT, maxTokens)
-          const fixData = await sendRequest(fixReq, t)
+          const fixData = await callModel(fixPrompt)
           const healed = repairJSON(cleanOutput(cfg.extract(fixData)), t)
           normalizeConnections(healed.value)
           localRepair(healed.value)

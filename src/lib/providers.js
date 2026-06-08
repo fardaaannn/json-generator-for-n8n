@@ -18,6 +18,16 @@ function buildMessages(prompt, system) {
     : [{ role: 'user', content: prompt }];
 }
 
+// OpenAI's reasoning models (o-series: o1/o3/o4..., and the gpt-5 line) speak a
+// different dialect of the Chat Completions request than gpt-4o/3.5: they take
+// `max_completion_tokens` instead of `max_tokens` and reject any non-default
+// `temperature`. Sending the classic params makes those models return a 400.
+// Since the live model catalog (parseModels) surfaces these ids in the picker,
+// we must branch on the request shape so picking one actually works.
+export function isOpenAIReasoningModel(model) {
+  return typeof model === 'string' && (/^o\d/i.test(model) || /^gpt-5/i.test(model));
+}
+
 export const PROVIDERS = {
   anthropic: {
     name: 'Anthropic (Claude)',
@@ -80,17 +90,25 @@ export const PROVIDERS = {
       // that cannot generate workflow JSON — keep only chat-capable GPT/o-series.
       return ids.filter(id => /^(gpt-|o\d|chatgpt)/i.test(id)).sort();
     },
-    buildRequest(model, prompt, apiKey, baseUrl, system, maxTokens = DEFAULT_MAX_TOKENS) {
+    buildRequest(model, prompt, apiKey, baseUrl, system, maxTokens = DEFAULT_MAX_TOKENS, { responseFormat = true } = {}) {
+      const reasoning = isOpenAIReasoningModel(model);
+      const body = {
+        model,
+        messages: buildMessages(prompt, system),
+        ...(responseFormat ? { response_format: { type: 'json_object' } } : {}),
+      };
+      if (reasoning) {
+        // o-series / gpt-5: must use max_completion_tokens and may not set a
+        // custom temperature (only the default is accepted).
+        body.max_completion_tokens = maxTokens;
+      } else {
+        body.max_tokens = maxTokens;
+        body.temperature = DEFAULT_TEMPERATURE;
+      }
       return {
         url: this.url,
         headers: {'Content-Type': 'application/json', 'Authorization': 'Bearer ' + apiKey},
-        body: JSON.stringify({
-          model,
-          max_tokens: maxTokens,
-          temperature: DEFAULT_TEMPERATURE,
-          messages: buildMessages(prompt, system),
-          response_format: { type: 'json_object' }
-        })
+        body: JSON.stringify(body)
       };
     },
     extract(data) { return data.choices[0].message.content; }
@@ -110,7 +128,7 @@ export const PROVIDERS = {
       // Drop speech-to-text / TTS / guard models that can't produce text JSON.
       return ids.filter(id => !/whisper|tts|guard|playai/i.test(id)).sort();
     },
-    buildRequest(model, prompt, apiKey, baseUrl, system, maxTokens = DEFAULT_MAX_TOKENS) {
+    buildRequest(model, prompt, apiKey, baseUrl, system, maxTokens = DEFAULT_MAX_TOKENS, { responseFormat = true } = {}) {
       return {
         url: this.url,
         headers: {'Content-Type': 'application/json', 'Authorization': 'Bearer ' + apiKey},
@@ -119,7 +137,7 @@ export const PROVIDERS = {
           max_tokens: maxTokens,
           temperature: DEFAULT_TEMPERATURE,
           messages: buildMessages(prompt, system),
-          response_format: { type: 'json_object' }
+          ...(responseFormat ? { response_format: { type: 'json_object' } } : {})
         })
       };
     },
@@ -141,7 +159,7 @@ export const PROVIDERS = {
       const ids = Array.isArray(data?.data) ? data.data.map(m => m.id).filter(Boolean) : [];
       return ids.sort();
     },
-    buildRequest(model, prompt, apiKey, baseUrl, system, maxTokens = DEFAULT_MAX_TOKENS) {
+    buildRequest(model, prompt, apiKey, baseUrl, system, maxTokens = DEFAULT_MAX_TOKENS, { responseFormat = true } = {}) {
       return {
         url: this.url,
         headers: {'Content-Type': 'application/json', 'Authorization': 'Bearer ' + apiKey},
@@ -150,7 +168,7 @@ export const PROVIDERS = {
           max_tokens: maxTokens,
           temperature: DEFAULT_TEMPERATURE,
           messages: buildMessages(prompt, system),
-          response_format: { type: 'json_object' }
+          ...(responseFormat ? { response_format: { type: 'json_object' } } : {})
         })
       };
     },
