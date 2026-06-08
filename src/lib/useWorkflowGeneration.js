@@ -12,6 +12,7 @@ import {
   validateStructure,
   maxTokensFor,
   sendRequest,
+  sendRequestStream,
   isResponseFormatError,
   SYSTEM_PROMPT,
 } from './pipeline'
@@ -48,6 +49,9 @@ export function useWorkflowGeneration({ t, onRunStart }) {
   const [wasRepaired, setWasRepaired] = useState(false)
   const [isGenerating, setIsGenerating] = useState(false)
   const [isRefining, setIsRefining] = useState(false)
+  // Partial model output shown live while a generate/refine is streaming. Empty
+  // when not streaming (or once the final parsed result replaces it).
+  const [streamingText, setStreamingText] = useState('')
   const [refineInstruction, setRefineInstruction] = useState('')
   const [history, setHistory] = useState([])
   const [showHistory, setShowHistory] = useState(false)
@@ -133,27 +137,64 @@ export function useWorkflowGeneration({ t, onRunStart }) {
     setWarnings([])
     setWasRepaired(false)
     setLastDiff(null)
+    setStreamingText('')
     if (onRunStart) onRunStart()
     setStatus({ state: 'active', key: 'statusGenerating', params: {} })
 
-    // Issue one model call, transparently retrying without response_format if
-    // the model/provider rejects JSON mode (common on some OpenRouter models).
-    const callModel = async (modelPrompt) => {
+    const buildReq = (modelPrompt, opts) =>
+      cfg.buildRequest(effectiveModel, modelPrompt, config.apiKey, baseUrlValue, SYSTEM_PROMPT, maxTokens, opts)
+
+    // Plain (non-streaming) call, transparently retrying without response_format
+    // if the model/provider rejects JSON mode (common on some OpenRouter
+    // models). Used directly for self-heal and as the streaming fallback.
+    const callModelText = async (modelPrompt) => {
       try {
-        const req = cfg.buildRequest(effectiveModel, modelPrompt, config.apiKey, baseUrlValue, SYSTEM_PROMPT, maxTokens)
-        return await sendRequest(req, t)
+        const data = await sendRequest(buildReq(modelPrompt), t)
+        return cfg.extract(data)
       } catch (e) {
         if (isResponseFormatError(e)) {
-          const req2 = cfg.buildRequest(effectiveModel, modelPrompt, config.apiKey, baseUrlValue, SYSTEM_PROMPT, maxTokens, { responseFormat: false })
-          return await sendRequest(req2, t)
+          const data = await sendRequest(buildReq(modelPrompt, { responseFormat: false }), t)
+          return cfg.extract(data)
         }
         throw e
       }
     }
 
+    // Get the model's raw text output. When `stream` is on and the provider
+    // supports it, the JSON appears live via setStreamingText; ANY streaming
+    // failure (except a real timeout) silently falls back to callModelText, so
+    // behaviour never regresses.
+    const getModelText = async (modelPrompt, { stream }) => {
+      if (!stream || typeof cfg.streamExtract !== 'function') {
+        return await callModelText(modelPrompt)
+      }
+      let lastUpdate = 0
+      try {
+        const text = await sendRequestStream(
+          buildReq(modelPrompt, { stream: true }),
+          t,
+          {
+            onToken: (full) => {
+              // Throttle UI updates so a long stream doesn't thrash React.
+              const now = Date.now()
+              if (now - lastUpdate > 60) { lastUpdate = now; setStreamingText(full) }
+            },
+          },
+          cfg.streamExtract,
+        )
+        if (text && text.trim()) return text
+        // Empty stream (provider ignored it / sent no content) — fall back.
+        return await callModelText(modelPrompt)
+      } catch (e) {
+        // A real timeout already waited the full window; don't wait again.
+        if (e && e.isTimeout) throw e
+        return await callModelText(modelPrompt)
+      }
+    }
+
     try {
-      const data = await callModel(prompt)
-      const first = repairJSON(cleanOutput(cfg.extract(data)), t)
+      const firstText = await getModelText(prompt, { stream: true })
+      const first = repairJSON(cleanOutput(firstText), t)
       let parsed = first.value
       let repaired = first.repaired
       // Fix connections that reference node ids instead of names (some models
@@ -177,8 +218,8 @@ export function useWorkflowGeneration({ t, onRunStart }) {
             version: N8N_VERSION,
             lang: config.lang,
           })
-          const fixData = await callModel(fixPrompt)
-          const healed = repairJSON(cleanOutput(cfg.extract(fixData)), t)
+          const fixText = await getModelText(fixPrompt, { stream: false })
+          const healed = repairJSON(cleanOutput(fixText), t)
           normalizeConnections(healed.value)
           localRepair(healed.value)
           const healedWarnings = validateStructure(healed.value, t)
@@ -196,6 +237,7 @@ export function useWorkflowGeneration({ t, onRunStart }) {
     } catch (e) {
       setErrorMsg(t('errGenerateFailed', { msg: e.message }))
       setStatus({ state: 'error', key: 'statusError', params: {} })
+      setStreamingText('')
     } finally {
       setBusy(false)
     }
@@ -325,6 +367,7 @@ export function useWorkflowGeneration({ t, onRunStart }) {
     wasRepaired,
     isGenerating,
     isRefining,
+    streamingText,
     refineInstruction, setRefineInstruction,
     history,
     showHistory, setShowHistory,

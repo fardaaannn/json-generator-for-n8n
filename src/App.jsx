@@ -61,6 +61,7 @@ export default function App() {
     currentJSON, workflowObj, nodeTags, outputFilename,
     status, errorMsg, setErrorMsg, warnings, wasRepaired,
     isGenerating, isRefining,
+    streamingText,
     refineInstruction, setRefineInstruction,
     history, showHistory, setShowHistory,
     lastDiff, setLastDiff,
@@ -551,6 +552,8 @@ export default function App() {
             ) : (
               <pre className="output-code" tabIndex={0} aria-label={t('outputTitle')}>{currentJSON}</pre>
             )
+          ) : streamingText ? (
+            <pre className="output-code output-streaming" tabIndex={0} aria-label={t('outputTitle')} aria-live="polite">{streamingText}</pre>
           ) : (
             <div className="output-placeholder">
               <div className="placeholder-icon" aria-hidden="true">{'{ }'}</div>

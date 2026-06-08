@@ -52,7 +52,7 @@ export const PROVIDERS = {
     parseModels(data) {
       return Array.isArray(data?.data) ? data.data.map(m => m.id).filter(Boolean) : [];
     },
-    buildRequest(model, prompt, apiKey, baseUrl, system, maxTokens = DEFAULT_MAX_TOKENS) {
+    buildRequest(model, prompt, apiKey, baseUrl, system, maxTokens = DEFAULT_MAX_TOKENS, { stream = false } = {}) {
       // Anthropic Messages API has no response_format; we use the top-level
       // `system` param to enforce the JSON-only contract.
       return {
@@ -68,11 +68,16 @@ export const PROVIDERS = {
           max_tokens: maxTokens,
           temperature: DEFAULT_TEMPERATURE,
           ...(system ? { system } : {}),
+          ...(stream ? { stream: true } : {}),
           messages: [{role:'user', content: prompt}]
         })
       };
     },
-    extract(data) { return data.content.map(b => b.text || '').join(''); }
+    extract(data) { return data.content.map(b => b.text || '').join(''); },
+    // Anthropic streams typed events; only content_block_delta carries text.
+    streamExtract(obj) {
+      return (obj && obj.type === 'content_block_delta' && obj.delta) ? (obj.delta.text || '') : '';
+    }
   },
   openai: {
     name: 'OpenAI (GPT)',
@@ -90,12 +95,13 @@ export const PROVIDERS = {
       // that cannot generate workflow JSON — keep only chat-capable GPT/o-series.
       return ids.filter(id => /^(gpt-|o\d|chatgpt)/i.test(id)).sort();
     },
-    buildRequest(model, prompt, apiKey, baseUrl, system, maxTokens = DEFAULT_MAX_TOKENS, { responseFormat = true } = {}) {
+    buildRequest(model, prompt, apiKey, baseUrl, system, maxTokens = DEFAULT_MAX_TOKENS, { responseFormat = true, stream = false } = {}) {
       const reasoning = isOpenAIReasoningModel(model);
       const body = {
         model,
         messages: buildMessages(prompt, system),
         ...(responseFormat ? { response_format: { type: 'json_object' } } : {}),
+        ...(stream ? { stream: true } : {}),
       };
       if (reasoning) {
         // o-series / gpt-5: must use max_completion_tokens and may not set a
@@ -111,7 +117,9 @@ export const PROVIDERS = {
         body: JSON.stringify(body)
       };
     },
-    extract(data) { return data.choices[0].message.content; }
+    extract(data) { return data.choices[0].message.content; },
+    // OpenAI-compatible chat-completions streaming: text lives in delta.content.
+    streamExtract(obj) { return obj?.choices?.[0]?.delta?.content || ''; }
   },
   groq: {
     name: 'Groq',
@@ -138,7 +146,7 @@ export const PROVIDERS = {
       }
       return out;
     },
-    buildRequest(model, prompt, apiKey, baseUrl, system, maxTokens = DEFAULT_MAX_TOKENS, { responseFormat = true } = {}) {
+    buildRequest(model, prompt, apiKey, baseUrl, system, maxTokens = DEFAULT_MAX_TOKENS, { responseFormat = true, stream = false } = {}) {
       return {
         url: this.url,
         headers: {'Content-Type': 'application/json', 'Authorization': 'Bearer ' + apiKey},
@@ -147,11 +155,13 @@ export const PROVIDERS = {
           max_tokens: maxTokens,
           temperature: DEFAULT_TEMPERATURE,
           messages: buildMessages(prompt, system),
-          ...(responseFormat ? { response_format: { type: 'json_object' } } : {})
+          ...(responseFormat ? { response_format: { type: 'json_object' } } : {}),
+          ...(stream ? { stream: true } : {})
         })
       };
     },
-    extract(data) { return data.choices[0].message.content; }
+    extract(data) { return data.choices[0].message.content; },
+    streamExtract(obj) { return obj?.choices?.[0]?.delta?.content || ''; }
   },
   openrouter: {
     name: 'OpenRouter',
@@ -189,7 +199,7 @@ export const PROVIDERS = {
       }
       return out;
     },
-    buildRequest(model, prompt, apiKey, baseUrl, system, maxTokens = DEFAULT_MAX_TOKENS, { responseFormat = true } = {}) {
+    buildRequest(model, prompt, apiKey, baseUrl, system, maxTokens = DEFAULT_MAX_TOKENS, { responseFormat = true, stream = false } = {}) {
       return {
         url: this.url,
         headers: {'Content-Type': 'application/json', 'Authorization': 'Bearer ' + apiKey},
@@ -198,11 +208,13 @@ export const PROVIDERS = {
           max_tokens: maxTokens,
           temperature: DEFAULT_TEMPERATURE,
           messages: buildMessages(prompt, system),
-          ...(responseFormat ? { response_format: { type: 'json_object' } } : {})
+          ...(responseFormat ? { response_format: { type: 'json_object' } } : {}),
+          ...(stream ? { stream: true } : {})
         })
       };
     },
-    extract(data) { return data.choices[0].message.content; }
+    extract(data) { return data.choices[0].message.content; },
+    streamExtract(obj) { return obj?.choices?.[0]?.delta?.content || ''; }
   },
   custom: {
     name: 'Custom',
@@ -230,7 +242,7 @@ export const PROVIDERS = {
       const ids = arr.map(m => (typeof m === 'string' ? m : m?.id)).filter(Boolean);
       return [...new Set(ids)].sort();
     },
-    buildRequest(model, prompt, apiKey, baseUrl, system, maxTokens = DEFAULT_MAX_TOKENS) {
+    buildRequest(model, prompt, apiKey, baseUrl, system, maxTokens = DEFAULT_MAX_TOKENS, { stream = false } = {}) {
       const cleanBase = (baseUrl || '').replace(/\/+$/, '');
       const url = cleanBase + '/chat/completions';
       // No response_format here: a custom OpenAI-compatible endpoint may point
@@ -246,7 +258,8 @@ export const PROVIDERS = {
           model,
           max_tokens: maxTokens,
           temperature: DEFAULT_TEMPERATURE,
-          messages: buildMessages(prompt, system)
+          messages: buildMessages(prompt, system),
+          ...(stream ? { stream: true } : {})
         })
       };
     },
@@ -254,6 +267,7 @@ export const PROVIDERS = {
       return data.choices?.[0]?.message?.content
         || data.content?.[0]?.text
         || JSON.stringify(data);
-    }
+    },
+    streamExtract(obj) { return obj?.choices?.[0]?.delta?.content || ''; }
   }
 };
