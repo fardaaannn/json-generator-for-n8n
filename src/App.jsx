@@ -344,7 +344,7 @@ export default function App() {
                 aria-expanded={showImportJson}
                 aria-controls="import-json-body"
               >
-                <span>{t('editExistingTitle')} <span className="optional-tag">{t('optionalTag')}</span></span>
+                <span>{t('editExistingTitle')}</span>
                 <span className="n8n-import-chevron" aria-hidden="true">{showImportJson ? '\u2212' : '+'}</span>
               </button>
               {showImportJson && (
@@ -673,7 +673,7 @@ export default function App() {
               aria-expanded={n8n.showN8nImport}
               aria-controls="n8n-import-body"
             >
-              <span>{t('n8nImportTitle')} <span className="optional-tag">{t('optionalTag')}</span></span>
+              <span>{t('n8nImportTitle')}</span>
               <span className="n8n-import-chevron" aria-hidden="true">{n8n.showN8nImport ? '\u2212' : '+'}</span>
             </button>
             {n8n.showN8nImport && (
