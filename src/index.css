@@ -70,6 +70,15 @@ body {
   display: flex;
   align-items: center;
   gap: 10px;
+  text-decoration: none;
+  color: inherit;
+  cursor: pointer;
+}
+.header-brand:hover .site-name { opacity: 0.75; }
+.header-brand:focus-visible {
+  outline: 2px solid var(--text);
+  outline-offset: 4px;
+  border-radius: 6px;
 }
 .lang-switch {
   display: inline-flex;
