@@ -6,11 +6,17 @@ import {
   nodeAriaLabel,
   summaryAriaLabel,
 } from '../lib/workflowLayout'
+import NodeIcon from '../lib/nodeIcons'
 
 /**
- * Lightweight, dependency-free visual preview of an n8n workflow. The layout
- * math and accessibility wording live in lib/workflowLayout.js (pure +
- * unit-tested); this component only renders the result.
+ * Lightweight, dependency-free visual preview of an n8n workflow, styled to
+ * resemble the real n8n canvas: each node is a rounded icon card (triggers get
+ * the pill-left shape) with its name below it and input/output ports on the
+ * sides, joined by bezier edges (dashed for non-main / sub-node links). Sticky
+ * notes render as translucent note cards.
+ *
+ * The layout math and accessibility wording live in lib/workflowLayout.js
+ * (pure + unit-tested); this component only renders the result.
  *
  * Accessibility: the diagram is exposed as a labelled group/list whose items
  * (the nodes) are focusable and self-describing, so keyboard and screen-reader
@@ -40,27 +46,49 @@ export default function WorkflowPreview({ workflow, t }) {
             return (
               <path
                 key={i}
-                className="wf-edge"
+                className={'wf-edge' + (e.type && e.type !== 'main' ? ' wf-edge-sub' : '')}
                 d={`M ${x1} ${y1} C ${mx} ${y1}, ${mx} ${y2}, ${x2} ${y2}`}
                 fill="none"
               />
             )
           })}
         </svg>
-        {boxes.map((b) => (
-          <div
-            key={b.key}
-            className={'wf-node ' + b.cls}
-            style={{ left: b.x, top: b.y, width: NODE_W, height: NODE_H }}
-            role="listitem"
-            tabIndex={0}
-            aria-label={nodeAriaLabel(b, tr)}
-            title={b.name + ' (' + b.type + ')'}
-          >
-            <span className="wf-node-name" aria-hidden="true">{b.name}</span>
-            <span className="wf-node-type" aria-hidden="true">{b.type}</span>
-          </div>
-        ))}
+
+        {boxes.map((b) => {
+          if (b.isSticky) {
+            return (
+              <div
+                key={b.key}
+                className="wf-sticky"
+                style={{ left: b.x, top: b.y, width: NODE_W, minHeight: NODE_H }}
+                role="listitem"
+                tabIndex={0}
+                aria-label={nodeAriaLabel(b, tr)}
+                title={b.name}
+              >
+                <span className="wf-sticky-text" aria-hidden="true">{b.content || b.name}</span>
+              </div>
+            )
+          }
+          return (
+            <div
+              key={b.key}
+              className={'wf-node-wrap' + (b.isTrigger ? ' trigger' : '')}
+              style={{ left: b.x, top: b.y, width: NODE_W, height: NODE_H }}
+              role="listitem"
+              tabIndex={0}
+              aria-label={nodeAriaLabel(b, tr)}
+              title={b.name + ' (' + b.type + ')'}
+            >
+              <div className={'wf-node ' + b.cls} aria-hidden="true">
+                {b.hasInput && <span className="wf-port wf-port-in" />}
+                <NodeIcon type={b.rawType} />
+                {b.hasOutput && <span className="wf-port wf-port-out" />}
+              </div>
+              <span className="wf-node-name" aria-hidden="true">{b.name}</span>
+            </div>
+          )
+        })}
       </div>
     </div>
   )

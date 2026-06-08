@@ -2,7 +2,6 @@ import { useState, useEffect, useCallback } from 'react'
 import { PROVIDERS } from './lib/providers'
 import { EXAMPLES } from './lib/examples'
 import { fetchModels, getModelMeta, formatModelMeta } from './lib/modelCatalog'
-import { getNodeClass } from './lib/getNodeClass'
 import { useLanguage } from './lib/i18n'
 import { useWorkflowGeneration } from './lib/useWorkflowGeneration'
 import { useN8nImport } from './lib/useN8nImport'
@@ -59,7 +58,7 @@ export default function App() {
   // run starts it clears any lingering n8n import banner.
   const gen = useWorkflowGeneration({ t, onRunStart: n8n.reset })
   const {
-    currentJSON, workflowObj, nodeTags, outputFilename,
+    currentJSON, workflowObj, outputFilename,
     status, errorMsg, setErrorMsg, warnings, wasRepaired,
     isGenerating, isRefining,
     streamingText,
@@ -576,13 +575,7 @@ export default function App() {
               </div>
             )}
           </div>
-          {nodeTags.length > 0 && (
-            <div className="node-tags">
-              {nodeTags.map((n, i) => (
-                <span key={i} className={'node-tag ' + getNodeClass(n.type)}>{n.name}</span>
-              ))}
-            </div>
-          )}
+
           {currentJSON ? (
             outputView === 'preview' ? (
               <WorkflowPreview workflow={workflowObj} t={t} />
