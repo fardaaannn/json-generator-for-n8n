@@ -244,6 +244,38 @@ export function useWorkflowGeneration({ t, onRunStart }) {
     })
   }, [refineInstruction, workflowObj, currentJSON, t, validateConfig, runRequest])
 
+  // Load a workflow the user pasted in (existing n8n JSON), so they can
+  // preview, refine, or import it without generating from scratch. Runs the
+  // same normalize + local-repair + validate path as a generated result, so a
+  // pasted workflow is treated identically downstream. Returns true on success.
+  const loadWorkflow = useCallback((jsonText) => {
+    const text = typeof jsonText === 'string' ? jsonText.trim() : ''
+    if (!text) {
+      setErrorMsg(t('errEnterWorkflowJson'))
+      return false
+    }
+    let parsed
+    try {
+      parsed = JSON.parse(text)
+    } catch (e) {
+      setErrorMsg(t('errWorkflowJsonInvalid'))
+      return false
+    }
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed) || !Array.isArray(parsed.nodes)) {
+      setErrorMsg(t('errWorkflowJsonShape'))
+      return false
+    }
+    if (onRunStart) onRunStart()
+    setErrorMsg('')
+    setLastDiff(null)
+    normalizeConnections(parsed)
+    localRepair(parsed)
+    const pretty = JSON.stringify(parsed, null, 2)
+    // Pasted input is taken as-is (not bracket-repaired), so repaired=false.
+    applyResult(parsed, pretty, false)
+    return true
+  }, [t, onRunStart, applyResult])
+
   const restoreHistory = useCallback((entry) => {
     try {
       const parsed = JSON.parse(entry.json)
@@ -285,6 +317,7 @@ export function useWorkflowGeneration({ t, onRunStart }) {
     lastDiff, setLastDiff,
     generate,
     refine,
+    loadWorkflow,
     restoreHistory,
     clearHistory,
   }

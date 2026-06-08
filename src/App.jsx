@@ -43,6 +43,11 @@ export default function App() {
   const [copied, setCopied] = useState(false)
   const [outputView, setOutputView] = useState('json')
 
+  // "Edit an existing workflow": paste raw n8n JSON to load it for preview/
+  // refine/import without generating from scratch.
+  const [importJson, setImportJson] = useState('')
+  const [showImportJson, setShowImportJson] = useState(false)
+
   // Optional Tier 2: direct import to a user's own n8n instance.
   const n8n = useN8nImport({ t })
 
@@ -57,6 +62,7 @@ export default function App() {
     history, showHistory, setShowHistory,
     lastDiff, setLastDiff,
     generate, refine, restoreHistory, clearHistory,
+    loadWorkflow,
   } = gen
 
   useEffect(() => {
@@ -214,6 +220,12 @@ export default function App() {
     refine({ lang, provider, selectedModel, customModel, baseUrl, apiKey })
   }, [refine, lang, provider, selectedModel, customModel, baseUrl, apiKey])
 
+  const handleLoadWorkflow = useCallback(() => {
+    // Collapse the panel only on a successful load; on failure the hook sets an
+    // error message and we keep the pasted text so the user can fix it.
+    if (loadWorkflow(importJson)) setShowImportJson(false)
+  }, [loadWorkflow, importJson])
+
   const handleImportToN8n = useCallback(() => {
     n8n.importWorkflow(workflowObj)
   }, [n8n, workflowObj])
@@ -277,6 +289,42 @@ export default function App() {
                   </button>
                 ))}
               </div>
+            </div>
+
+            <div className="n8n-import">
+              <button
+                type="button"
+                className="n8n-import-toggle"
+                onClick={() => setShowImportJson((v) => !v)}
+                aria-expanded={showImportJson}
+                aria-controls="import-json-body"
+              >
+                <span>{t('editExistingTitle')} <span className="optional-tag">{t('optionalTag')}</span></span>
+                <span className="n8n-import-chevron" aria-hidden="true">{showImportJson ? '\u2212' : '+'}</span>
+              </button>
+              {showImportJson && (
+                <div className="n8n-import-body" id="import-json-body">
+                  <p className="security-notice">{t('editExistingDesc')}</p>
+                  <div>
+                    <label className="field-label" htmlFor="importJson">{t('pasteWorkflowLabel')}</label>
+                    <textarea
+                      id="importJson"
+                      rows="6"
+                      value={importJson}
+                      onChange={(e) => { setImportJson(e.target.value); setErrorMsg('') }}
+                      placeholder={t('pasteWorkflowPlaceholder')}
+                    />
+                  </div>
+                  <button
+                    type="button"
+                    className="btn-primary"
+                    onClick={handleLoadWorkflow}
+                    disabled={!importJson.trim()}
+                  >
+                    <span>{t('loadWorkflowBtn')}</span>
+                  </button>
+                </div>
+              )}
             </div>
 
             <div className="divider"></div>
