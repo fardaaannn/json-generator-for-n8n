@@ -29,6 +29,7 @@ export default function App() {
   const [selectedModel, setSelectedModel] = useState(initialModels.length > 0 ? initialModels[0] : '__custom__')
   const [customModel, setCustomModel] = useState('')
   const [baseUrl, setBaseUrl] = useState('')
+  const [rememberBaseUrl, setRememberBaseUrl] = useState(false)
 
   // Dynamically fetched model catalog for the current provider (falls back to
   // the provider's hardcoded list). See lib/modelCatalog.js.
@@ -75,6 +76,12 @@ export default function App() {
       setApiKey(storedKey)
       setRememberKey(true)
     }
+    const storedBaseUrl = localStorage.getItem('n8n_gen_base_url')
+    const storedRememberBaseUrl = localStorage.getItem('n8n_gen_remember_base_url')
+    if (storedRememberBaseUrl === 'true' && storedBaseUrl) {
+      setBaseUrl(storedBaseUrl)
+      setRememberBaseUrl(true)
+    }
   }, [])
 
   // Persist the API key only while "remember" is enabled. Depends on
@@ -92,6 +99,16 @@ export default function App() {
       localStorage.setItem('n8n_gen_remember', 'true')
     }
   }, [apiKey, rememberKey])
+
+  // Persist the custom provider's Base URL only while its "remember" toggle is
+  // on. Unlike the API key this is not a secret, but it's still opt-in and
+  // mirrors the same pattern so the two behave consistently.
+  useEffect(() => {
+    if (rememberBaseUrl && baseUrl) {
+      localStorage.setItem('n8n_gen_base_url', baseUrl)
+      localStorage.setItem('n8n_gen_remember_base_url', 'true')
+    }
+  }, [baseUrl, rememberBaseUrl])
 
   // Load the live model catalog for the current provider. Debounced on apiKey
   // so typing/pasting a key doesn't fire a request per keystroke. Always keeps
@@ -214,6 +231,20 @@ export default function App() {
       localStorage.setItem('n8n_gen_remember', 'false')
     }
   }, [apiKey])
+
+  const handleRememberBaseUrlChange = useCallback((e) => {
+    const checked = e.target.checked
+    setRememberBaseUrl(checked)
+    if (checked) {
+      if (baseUrl) {
+        localStorage.setItem('n8n_gen_base_url', baseUrl)
+      }
+      localStorage.setItem('n8n_gen_remember_base_url', 'true')
+    } else {
+      localStorage.removeItem('n8n_gen_base_url')
+      localStorage.setItem('n8n_gen_remember_base_url', 'false')
+    }
+  }, [baseUrl])
 
   const examples = EXAMPLES[uiLang] || EXAMPLES.en
 
@@ -450,6 +481,12 @@ export default function App() {
                 <div style={{marginTop:'10px'}}>
                   <label className="field-label" htmlFor="baseUrl">{t('baseUrl')} <span style={{fontWeight:400,opacity:0.7}}>{t('baseUrlHint')}</span></label>
                   <input id="baseUrl" type="url" value={baseUrl} onChange={(e) => setBaseUrl(e.target.value)} placeholder="https://ai.sumopod.com/v1" />
+                  <div style={{marginTop:'6px'}}>
+                    <label className="checkbox-label">
+                      <input type="checkbox" checked={rememberBaseUrl} onChange={handleRememberBaseUrlChange} />
+                      {t('rememberBaseUrl')}
+                    </label>
+                  </div>
                 </div>
               )}
               <div style={{marginTop:'10px'}}>
