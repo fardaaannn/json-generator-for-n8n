@@ -8,6 +8,7 @@ import {
   cleanOutput,
   repairJSON,
   normalizeConnections,
+  localRepair,
   validateStructure,
   maxTokensFor,
   sendRequest,
@@ -143,6 +144,10 @@ export function useWorkflowGeneration({ t, onRunStart }) {
       // Fix connections that reference node ids instead of names (some models
       // do this), so links survive import and render in the preview.
       normalizeConnections(parsed)
+      // Repair the mechanical issues (missing/duplicate ids, missing positions
+      // or parameters) locally first, so a result whose only problems are these
+      // never needs the costly self-heal round-trip below.
+      localRepair(parsed)
       let resultWarnings = validateStructure(parsed, t)
 
       // Self-heal: if the first result has validation issues, ask the model
@@ -161,6 +166,7 @@ export function useWorkflowGeneration({ t, onRunStart }) {
           const fixData = await sendRequest(fixReq, t)
           const healed = repairJSON(cleanOutput(cfg.extract(fixData)), t)
           normalizeConnections(healed.value)
+          localRepair(healed.value)
           const healedWarnings = validateStructure(healed.value, t)
           if (healedWarnings.length < resultWarnings.length) {
             parsed = healed.value

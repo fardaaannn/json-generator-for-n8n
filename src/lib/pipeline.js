@@ -1,4 +1,5 @@
 import { isLikelyUnknownNodeType } from './n8nNodes.js';
+import { computeLayout } from './workflowLayout.js';
 
 // Client-side request timeout. Generous on purpose: reasoning models (and big
 // workflows) can legitimately take well over a minute, so a too-tight limit
@@ -466,6 +467,73 @@ export function normalizeConnections(workflow) {
 function isLikelyTrigger(type) {
   if (typeof type !== 'string') return false;
   return /trigger/i.test(type) || /webhook/i.test(type) || /\.(start|manualTrigger)$/i.test(type);
+}
+
+/**
+ * Fix the structural issues we can resolve locally — WITHOUT a second model
+ * call. The self-heal round-trip in useWorkflowGeneration costs another full
+ * API request (latency + tokens), but several of the issues validateStructure
+ * flags don't actually need the model's judgement: a missing/duplicate id, a
+ * missing position, or missing parameters can all be repaired deterministically
+ * here. Doing so means a result whose ONLY problems are these mechanical ones
+ * skips the expensive heal entirely.
+ *
+ * Deliberately conservative — it only touches things that are safe to change
+ * automatically and leaves anything requiring real understanding (unknown node
+ * types, duplicate NAMES, missing types, orphan/unknown connections) untouched
+ * so the model still gets a chance to fix those. In particular it never renames
+ * a node, because connections are keyed by name and a rename would silently
+ * break links. Mutates and returns the workflow.
+ */
+export function localRepair(workflow) {
+  if (!workflow || typeof workflow !== 'object' || Array.isArray(workflow)) return workflow;
+
+  // Top-level shape: only set defaults when the value is the wrong type, so we
+  // never clobber a value the model already provided correctly.
+  if (typeof workflow.name !== 'string') workflow.name = 'My Workflow';
+  if (!workflow.settings || typeof workflow.settings !== 'object' || Array.isArray(workflow.settings)) {
+    workflow.settings = {};
+  }
+  if (workflow.active === undefined) workflow.active = false;
+
+  const nodes = Array.isArray(workflow.nodes) ? workflow.nodes : [];
+
+  // Give every node a unique id and default parameters. Duplicate or missing
+  // ids are reassigned (id uniqueness doesn't affect connections, which key on
+  // name, so this is always safe).
+  const seenIds = new Set();
+  let counter = 1;
+  const nextId = () => {
+    let id;
+    do { id = 'node-' + (counter++); } while (seenIds.has(id));
+    return id;
+  };
+  for (const n of nodes) {
+    if (!n || typeof n !== 'object' || Array.isArray(n)) continue;
+    if (n.id == null || n.id === '' || seenIds.has(String(n.id))) {
+      n.id = nextId();
+    }
+    seenIds.add(String(n.id));
+    if (n.parameters === undefined) n.parameters = {};
+  }
+
+  // Assign positions to any node missing one. Reuse the preview's graph layout
+  // so auto-placed nodes follow the connection flow instead of stacking; fall
+  // back to a simple horizontal spread if the layout can't be computed.
+  const needsPos = nodes.some((n) => n && typeof n === 'object' && !Array.isArray(n) && !Array.isArray(n.position));
+  if (needsPos) {
+    let layout = null;
+    try { layout = computeLayout(workflow); } catch (e) { layout = null; }
+    const byKey = layout ? new Map(layout.boxes.map((b) => [b.key, b])) : null;
+    nodes.forEach((n, i) => {
+      if (!n || typeof n !== 'object' || Array.isArray(n) || Array.isArray(n.position)) return;
+      const key = (n.name || n.id) || ('node-' + i);
+      const box = byKey && byKey.get(key);
+      n.position = box ? [Math.round(box.x), Math.round(box.y)] : [240 + i * 220, 300];
+    });
+  }
+
+  return workflow;
 }
 
 export function validateStructure(parsed, t = fallbackT) {
