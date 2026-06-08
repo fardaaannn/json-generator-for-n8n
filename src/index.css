@@ -263,6 +263,14 @@ select {
   word-break: break-word; max-height: 560px;
 }
 
+/* Live-streaming output: a blinking caret hints the JSON is still arriving. */
+.output-streaming::after {
+  content: '\u258B';
+  margin-left: 1px;
+  animation: streamCaretBlink 1s steps(1) infinite;
+}
+@keyframes streamCaretBlink { 50% { opacity: 0; } }
+
 /* Output view toggle (JSON / Preview) */
 .output-view-toggle {
   display: inline-flex; align-items: center; gap: 2px;

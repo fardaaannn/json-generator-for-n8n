@@ -425,6 +425,99 @@ export async function sendRequest(req, t = fallbackT, { timeout = REQUEST_TIMEOU
   throw new Error(t('errNetwork', { msg: 'retries exhausted' }));
 }
 
+/**
+ * Streaming variant of sendRequest. Opens a Server-Sent Events stream, feeds
+ * each incremental text delta to `onToken(fullSoFar)`, and returns the FULL
+ * accumulated text once the stream ends. `streamExtract(parsedDataObject)`
+ * pulls the text delta out of a single SSE `data:` payload (provider-specific).
+ *
+ * Designed to FAIL SOFT: any problem (provider ignored streaming, a non-OK
+ * status, a mid-stream hiccup) throws so the caller can fall back to the plain
+ * non-streaming sendRequest — behaviour then never regresses. Only a genuine
+ * timeout is tagged (`err.isTimeout`) so the caller can avoid a second long
+ * wait. This function does NOT retry; retries live in the fallback path.
+ */
+export async function sendRequestStream(req, t = fallbackT, { onToken, timeout = REQUEST_TIMEOUT_MS } = {}, streamExtract) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeout);
+
+  let res;
+  try {
+    res = await fetch(req.url, { method: 'POST', headers: req.headers, body: req.body, signal: controller.signal });
+  } catch (err) {
+    clearTimeout(timer);
+    if (err && err.name === 'AbortError') {
+      const e = new Error(t('errTimeout', { s: Math.round(timeout / 1000) }));
+      e.isTimeout = true;
+      throw e;
+    }
+    throw new Error(t('errNetwork', { msg: err.message || String(err) }));
+  }
+
+  if (!res.ok) {
+    clearTimeout(timer);
+    let errMsg = 'HTTP ' + res.status;
+    try {
+      const errData = await res.json();
+      errMsg = errData.error?.message || errData.message || errData.detail || errMsg;
+    } catch (e) {
+      try { errMsg = (await res.text()).slice(0, 200) || errMsg; } catch (e2) { /* ignore */ }
+    }
+    throw new Error(errMsg + ' (' + res.status + ')');
+  }
+
+  // No readable stream available (e.g. provider returned a normal body) — let
+  // the caller fall back to the non-streaming path.
+  if (!res.body || typeof res.body.getReader !== 'function') {
+    clearTimeout(timer);
+    throw new Error('streaming not supported');
+  }
+
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+  let full = '';
+  let done = false;
+  try {
+    while (!done) {
+      const chunk = await reader.read();
+      done = chunk.done;
+      if (!chunk.value) continue;
+      buffer += decoder.decode(chunk.value, { stream: true });
+      // SSE delivers events line by line; process every complete line we have.
+      let nl;
+      while ((nl = buffer.indexOf('\n')) !== -1) {
+        const line = buffer.slice(0, nl).trim();
+        buffer = buffer.slice(nl + 1);
+        // Skip blanks and SSE comment/keepalive lines; we only care about data.
+        if (!line || line.startsWith(':') || !line.startsWith('data:')) continue;
+        const payload = line.slice(5).trim();
+        if (payload === '[DONE]') { done = true; break; }
+        let obj;
+        try { obj = JSON.parse(payload); } catch (e) { continue; }
+        let delta = '';
+        try { delta = streamExtract ? (streamExtract(obj) || '') : ''; } catch (e) { delta = ''; }
+        if (delta) {
+          full += delta;
+          if (onToken) { try { onToken(full); } catch (e) { /* UI callback errors are non-fatal */ } }
+        }
+      }
+    }
+  } catch (err) {
+    if (err && err.name === 'AbortError') {
+      const e = new Error(t('errTimeout', { s: Math.round(timeout / 1000) }));
+      e.isTimeout = true;
+      throw e;
+    }
+    throw new Error(t('errNetwork', { msg: err.message || String(err) }));
+  } finally {
+    clearTimeout(timer);
+    try { reader.releaseLock(); } catch (e) { /* ignore */ }
+  }
+
+  return full;
+}
+
 // Merge two connection entries (used when an id-keyed and a name-keyed entry
 // collapse onto the same node after normalization — rare, but we don't want to
 // silently drop either one). Group arrays are concatenated per output index.
