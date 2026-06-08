@@ -17,6 +17,15 @@ export const translations = {
     descPlaceholder: 'Contoh: Buat workflow yang menerima webhook, filter data berdasarkan status, lalu kirim notifikasi ke Slack dan simpan ke Google Sheets...',
     charCount: '{n} karakter',
     quickExamples: 'Contoh cepat',
+    // Edit existing workflow
+    editExistingTitle: 'Edit workflow yang sudah ada',
+    editExistingDesc: 'Sudah punya JSON workflow n8n? Tempel di sini untuk di-preview, di-refine, atau di-import \u2014 tanpa generate dari nol.',
+    pasteWorkflowLabel: 'Tempel JSON workflow n8n',
+    pasteWorkflowPlaceholder: 'Tempel JSON workflow n8n di sini, lalu klik Muat workflow...',
+    loadWorkflowBtn: 'Muat workflow',
+    errEnterWorkflowJson: 'Tempel JSON workflow dulu ya!',
+    errWorkflowJsonInvalid: 'JSON tidak valid \u2014 periksa kembali workflow yang kamu tempel.',
+    errWorkflowJsonShape: 'JSON ini tidak terlihat seperti workflow n8n (butuh array "nodes").',
     // Provider
     aiProvider: 'AI Provider',
     provider: 'Provider',
@@ -167,6 +176,15 @@ export const translations = {
     descPlaceholder: 'Example: Build a workflow that receives a webhook, filters data by status, then sends a Slack notification and saves it to Google Sheets...',
     charCount: '{n} characters',
     quickExamples: 'Quick examples',
+    // Edit existing workflow
+    editExistingTitle: 'Edit an existing workflow',
+    editExistingDesc: 'Already have n8n workflow JSON? Paste it here to preview, refine, or import \u2014 no need to generate from scratch.',
+    pasteWorkflowLabel: 'Paste n8n workflow JSON',
+    pasteWorkflowPlaceholder: 'Paste your n8n workflow JSON here, then click Load workflow...',
+    loadWorkflowBtn: 'Load workflow',
+    errEnterWorkflowJson: 'Please paste a workflow JSON first!',
+    errWorkflowJsonInvalid: 'Invalid JSON \u2014 double-check the workflow you pasted.',
+    errWorkflowJsonShape: 'This JSON does not look like an n8n workflow (it needs a "nodes" array).',
     // Provider
     aiProvider: 'AI Provider',
     provider: 'Provider',
