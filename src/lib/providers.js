@@ -128,6 +128,16 @@ export const PROVIDERS = {
       // Drop speech-to-text / TTS / guard models that can't produce text JSON.
       return ids.filter(id => !/whisper|tts|guard|playai/i.test(id)).sort();
     },
+    // Groq exposes each model's context window (context_window). No pricing in
+    // the catalog, so we surface the context length only.
+    parseModelsMeta(data) {
+      const out = {};
+      const arr = Array.isArray(data?.data) ? data.data : [];
+      for (const m of arr) {
+        if (m && m.id && Number.isFinite(m.context_window)) out[m.id] = { context: m.context_window };
+      }
+      return out;
+    },
     buildRequest(model, prompt, apiKey, baseUrl, system, maxTokens = DEFAULT_MAX_TOKENS, { responseFormat = true } = {}) {
       return {
         url: this.url,
@@ -158,6 +168,26 @@ export const PROVIDERS = {
     parseModels(data) {
       const ids = Array.isArray(data?.data) ? data.data.map(m => m.id).filter(Boolean) : [];
       return ids.sort();
+    },
+    // OpenRouter's catalog is rich: each model carries its context window and
+    // per-token prompt/completion pricing. Surfacing this in the picker is what
+    // lets a user actually judge "is this a good model" rather than guessing.
+    parseModelsMeta(data) {
+      const out = {};
+      const arr = Array.isArray(data?.data) ? data.data : [];
+      for (const m of arr) {
+        if (!m || !m.id) continue;
+        const meta = {};
+        if (Number.isFinite(m.context_length)) meta.context = m.context_length;
+        if (m.pricing) {
+          const p = Number(m.pricing.prompt);
+          const c = Number(m.pricing.completion);
+          if (Number.isFinite(p)) meta.pricePrompt = p;
+          if (Number.isFinite(c)) meta.priceCompletion = c;
+        }
+        if (Object.keys(meta).length) out[m.id] = meta;
+      }
+      return out;
     },
     buildRequest(model, prompt, apiKey, baseUrl, system, maxTokens = DEFAULT_MAX_TOKENS, { responseFormat = true } = {}) {
       return {

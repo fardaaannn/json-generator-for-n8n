@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { PROVIDERS } from './lib/providers'
 import { EXAMPLES } from './lib/examples'
-import { fetchModels } from './lib/modelCatalog'
+import { fetchModels, getModelMeta, formatModelMeta } from './lib/modelCatalog'
 import { getNodeClass } from './lib/getNodeClass'
 import { useLanguage } from './lib/i18n'
 import { useWorkflowGeneration } from './lib/useWorkflowGeneration'
@@ -35,6 +35,9 @@ export default function App() {
   const [models, setModels] = useState(initialModels)
   const [modelsLoading, setModelsLoading] = useState(false)
   const [modelsError, setModelsError] = useState(false)
+  // Per-model metadata (context window / pricing) keyed by model id, surfaced
+  // in the picker. Populated from the catalog cache after a list resolves.
+  const [modelsMeta, setModelsMeta] = useState({})
 
   const [apiKey, setApiKey] = useState('')
   const [rememberKey, setRememberKey] = useState(false)
@@ -104,6 +107,7 @@ export default function App() {
     if (provider === 'custom') {
       if (!baseUrl) {
         setModels([]); setModelsLoading(false); setModelsError(false)
+        setModelsMeta({})
         // No catalog to pick from → fall back to the manual "Custom / Other" entry.
         setSelectedModel('__custom__')
         return
@@ -115,6 +119,7 @@ export default function App() {
             if (cancelled) return
             const next = (list && list.length) ? list : []
             setModels(next)
+            setModelsMeta(getModelMeta('custom', { apiKey, baseUrl }))
             setSelectedModel((prev) => (prev === '__custom__' || next.includes(prev)) ? prev : '__custom__')
           })
           .catch(() => { if (!cancelled) { setModels([]); setModelsError(true) } })
@@ -125,6 +130,7 @@ export default function App() {
     // No live source, or a key is required but not entered yet → built-in list.
     if (!cfg.modelsUrl || (cfg.requiresKeyForModels && !apiKey)) {
       setModels(fallback); setModelsLoading(false); setModelsError(false)
+      setModelsMeta({})
       return
     }
 
@@ -135,6 +141,7 @@ export default function App() {
           if (cancelled) return
           const next = (list && list.length) ? list : fallback
           setModels(next)
+          setModelsMeta(getModelMeta(provider, { apiKey }))
           setSelectedModel((prev) => (prev === '__custom__' || next.includes(prev)) ? prev : (next[0] || '__custom__'))
         })
         .catch(() => { if (!cancelled) { setModels(fallback); setModelsError(true) } })
@@ -154,6 +161,7 @@ export default function App() {
         .then((list) => {
           const next = (list && list.length) ? list : []
           setModels(next)
+          setModelsMeta(getModelMeta('custom', { apiKey, baseUrl }))
           setSelectedModel((prev) => (prev === '__custom__' || next.includes(prev)) ? prev : '__custom__')
         })
         .catch(() => { setModels([]); setModelsError(true) })
@@ -168,6 +176,7 @@ export default function App() {
       .then((list) => {
         const next = (list && list.length) ? list : fallback
         setModels(next)
+        setModelsMeta(getModelMeta(provider, { apiKey }))
         setSelectedModel((prev) => (prev === '__custom__' || next.includes(prev)) ? prev : (next[0] || '__custom__'))
       })
       .catch(() => { setModels(fallback); setModelsError(true) })
@@ -183,6 +192,7 @@ export default function App() {
     // Show this provider's built-in list immediately; the effect above then
     // refines it with the live catalog.
     setModels(newProvider === 'custom' ? [] : providerModels)
+    setModelsMeta({})
     if (providerModels.length > 0 && newProvider !== 'custom') {
       setSelectedModel(providerModels[0])
       setCustomModel('')
@@ -250,6 +260,9 @@ export default function App() {
   const providerConfig = PROVIDERS[provider]
   const modelOptions = models
   const recommendedSet = new Set(providerConfig.recommended || [])
+  // Whether any listed model has metadata (context/pricing) to show — used to
+  // decide whether to render the legend explaining the picker's suffixes.
+  const hasModelMeta = modelOptions.some((m) => formatModelMeta(modelsMeta[m]))
   const showCustomModel = selectedModel === '__custom__'
   const showBaseUrl = provider === 'custom'
   const needsKeyForModels = provider !== 'custom' && !!providerConfig.modelsUrl && providerConfig.requiresKeyForModels && !apiKey
@@ -369,12 +382,17 @@ export default function App() {
                     onChange={(e) => { setSelectedModel(e.target.value); setErrorMsg('') }}
                     disabled={provider === 'custom' && modelOptions.length === 0}
                   >
-                    {modelOptions.map((m) => (
-                      <option key={m} value={m}>{recommendedSet.has(m) ? '\u2605 ' + m : m}</option>
-                    ))}
+                    {modelOptions.map((m) => {
+                      const star = recommendedSet.has(m) ? '\u2605 ' : ''
+                      const meta = formatModelMeta(modelsMeta[m])
+                      return (
+                        <option key={m} value={m}>{star + m + (meta ? '  \u2014  ' + meta : '')}</option>
+                      )
+                    })}
                     <option value="__custom__">{t('customOther')}</option>
                   </select>
                   <p className="model-note">{t('modelQualityHint')}</p>
+                  {hasModelMeta && <p className="model-note">{t('modelMetaLegend')}</p>}
                   {needsKeyForModels && <p className="model-note">{t('modelsEnterKey')}</p>}
                   {modelsError && <p className="model-note">{t('modelsFetchError')}</p>}
                 </div>

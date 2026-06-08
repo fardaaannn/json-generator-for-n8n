@@ -57,9 +57,9 @@ function readCache(key) {
   }
 }
 
-function writeCache(key, models) {
+function writeCache(key, models, meta) {
   try {
-    localStorage.setItem(key, JSON.stringify({ ts: Date.now(), models }));
+    localStorage.setItem(key, JSON.stringify({ ts: Date.now(), models, meta: meta || {} }));
   } catch (e) {
     /* quota / disabled storage — caching is best-effort */
   }
@@ -137,11 +137,76 @@ export async function fetchModels(providerKey, { apiKey = '', baseUrl = '', forc
 
   const data = await res.json();
   const models = dedupeAndPrioritize(cfg.parseModels(data) || [], cfg.recommended);
+  const meta = (typeof cfg.parseModelsMeta === 'function' ? cfg.parseModelsMeta(data) : {}) || {};
   if (models.length) {
-    writeCache(key, models);
+    writeCache(key, models, meta);
     return models;
   }
   // Empty/unexpected payload — prefer stale cache, else signal "no live data".
   const cached = readCache(key);
   return (cached && cached.models.length) ? cached.models : null;
+}
+
+
+/**
+ * Read the cached per-model metadata map for a provider (populated as a side
+ * effect of fetchModels). Returns a `Record<id, { context?, pricePrompt?,
+ * priceCompletion? }>`, or an empty object when there's nothing cached. This
+ * is synchronous (localStorage) so the UI can render it right after the model
+ * list resolves, without a second async round-trip.
+ */
+export function getModelMeta(providerKey, { apiKey = '', baseUrl = '' } = {}) {
+  const cfg = PROVIDERS[providerKey];
+  if (!cfg) return {};
+  const cached = readCache(cacheKey(providerKey, cacheScope(cfg, apiKey, baseUrl)));
+  return (cached && cached.meta && typeof cached.meta === 'object') ? cached.meta : {};
+}
+
+// Render a context window as a compact "128K" / "1M" style string.
+function formatContext(n) {
+  if (!Number.isFinite(n) || n <= 0) return '';
+  if (n >= 1_000_000) {
+    const m = n / 1_000_000;
+    return (Number.isInteger(m) ? m : m.toFixed(1)) + 'M';
+  }
+  if (n >= 1000) return Math.round(n / 1000) + 'K';
+  return String(n);
+}
+
+// Convert a USD-per-token price into a short USD-per-1M-tokens string, e.g.
+// 0.0000025 -> "$2.5". Trailing zeros are trimmed; sub-cent prices keep enough
+// precision to stay meaningful.
+function formatPrice(perToken) {
+  const n = Number(perToken);
+  if (!Number.isFinite(n)) return '';
+  const per1M = n * 1_000_000;
+  if (per1M === 0) return '$0';
+  const decimals = per1M < 1 ? 3 : 2;
+  return '$' + parseFloat(per1M.toFixed(decimals)).toString();
+}
+
+/**
+ * Build a compact, human-readable summary of a model's metadata for the picker,
+ * e.g. "128K · $2.5/$10" (context window · prompt/completion price per 1M
+ * tokens) or "free" when both prices are zero. Returns '' when nothing useful
+ * is known. Kept pure so it's easy to unit-test and reuse.
+ */
+export function formatModelMeta(meta) {
+  if (!meta || typeof meta !== 'object') return '';
+  const parts = [];
+  const ctx = formatContext(meta.context);
+  if (ctx) parts.push(ctx);
+
+  const hasP = meta.pricePrompt != null;
+  const hasC = meta.priceCompletion != null;
+  if (hasP || hasC) {
+    const p = Number(meta.pricePrompt) || 0;
+    const c = Number(meta.priceCompletion) || 0;
+    if (p === 0 && c === 0) {
+      parts.push('free');
+    } else {
+      parts.push(formatPrice(p) + '/' + formatPrice(c));
+    }
+  }
+  return parts.join(' \u00b7 ');
 }
