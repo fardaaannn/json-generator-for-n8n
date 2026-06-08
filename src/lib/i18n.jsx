@@ -6,6 +6,7 @@ export const translations = {
     langName: 'ID',
     switchLang: 'Ganti bahasa',
     toggleTheme: 'Ganti tema terang/gelap',
+    brandHome: 'n8n Generator \u2014 ke atas halaman',
     // Hero
     heroBadge: 'Generator workflow n8n berbasis AI',
     heroTitle1: 'Buat workflow n8n',
@@ -165,6 +166,7 @@ export const translations = {
     langName: 'EN',
     switchLang: 'Switch language',
     toggleTheme: 'Toggle light/dark theme',
+    brandHome: 'n8n Generator \u2014 back to top',
     // Hero
     heroBadge: 'AI-powered n8n workflow generator',
     heroTitle1: 'Build n8n workflows',
