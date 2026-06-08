@@ -335,41 +335,94 @@ export function repairJSON(raw, t = fallbackT) {
 }
 
 /**
+ * Does this error look like the provider rejecting `response_format`/JSON mode?
+ * Some models (notably various ones on OpenRouter) don't support the
+ * json_object response format and answer with a 400 mentioning it. Callers use
+ * this to decide whether to transparently retry the request without it — the
+ * cleanOutput/repairJSON/validate layers still keep the output usable.
+ */
+export function isResponseFormatError(err) {
+  const msg = (err && err.message) ? String(err.message) : String(err);
+  return /response_format|json[_ ]?object|json mode|json schema|structured outputs?/i.test(msg);
+}
+
+const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+// Exponential backoff with a little jitter so retries from many clients don't
+// line up. attempt is 0-based.
+function backoffDelay(attempt, baseMs) {
+  return Math.round(baseMs * Math.pow(2, attempt) * (1 + Math.random() * 0.25));
+}
+
+// Honour a Retry-After header (seconds, or an HTTP date) when present, capped
+// so a hostile/huge value can't hang the UI. Returns ms, or null when absent.
+function parseRetryAfter(value) {
+  if (!value) return null;
+  const secs = Number(value);
+  if (Number.isFinite(secs)) return Math.min(Math.max(secs, 0) * 1000, 20000);
+  const when = Date.parse(value);
+  if (!Number.isNaN(when)) return Math.max(0, Math.min(when - Date.now(), 20000));
+  return null;
+}
+
+/**
  * Send the provider request with a timeout/abort and consistent error
  * surfacing. Returns the parsed JSON response body.
+ *
+ * Transient failures — HTTP 429 (rate limit), 5xx (server errors), and network
+ * blips — are retried with exponential backoff (respecting Retry-After for
+ * 429s), since providers like Groq/OpenRouter rate-limit free tiers often. A
+ * timeout/abort is NOT retried (it already waited the full window), and 4xx
+ * other than 429 fail fast (retrying a bad request won't help).
  */
-export async function sendRequest(req, t = fallbackT, { timeout = REQUEST_TIMEOUT_MS } = {}) {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeout);
-  let res;
-  try {
-    res = await fetch(req.url, {
-      method: 'POST',
-      headers: req.headers,
-      body: req.body,
-      signal: controller.signal,
-    });
-  } catch (err) {
-    clearTimeout(timer);
-    if (err && err.name === 'AbortError') {
-      throw new Error(t('errTimeout', { s: Math.round(timeout / 1000) }));
-    }
-    throw new Error(t('errNetwork', { msg: err.message || String(err) }));
-  }
-  clearTimeout(timer);
-
-  if (!res.ok) {
-    let errMsg = 'HTTP ' + res.status;
+export async function sendRequest(req, t = fallbackT, { timeout = REQUEST_TIMEOUT_MS, retries = 2, retryBaseMs = 600 } = {}) {
+  // attempt 0 is the first try; each retry increments it, bounded by `retries`.
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeout);
+    let res;
     try {
-      const errData = await res.json();
-      errMsg = errData.error?.message || errData.message || errData.detail || errMsg;
-    } catch (e) {
-      try { errMsg = (await res.text()).slice(0, 200) || errMsg; } catch (e2) { /* ignore */ }
+      res = await fetch(req.url, {
+        method: 'POST',
+        headers: req.headers,
+        body: req.body,
+        signal: controller.signal,
+      });
+    } catch (err) {
+      clearTimeout(timer);
+      if (err && err.name === 'AbortError') {
+        throw new Error(t('errTimeout', { s: Math.round(timeout / 1000) }));
+      }
+      // Network glitch — retry a few times before surfacing the error.
+      if (attempt < retries) {
+        await delay(backoffDelay(attempt, retryBaseMs));
+        continue;
+      }
+      throw new Error(t('errNetwork', { msg: err.message || String(err) }));
     }
-    throw new Error(errMsg + ' (' + res.status + ')');
-  }
+    clearTimeout(timer);
 
-  return res.json();
+    if (!res.ok) {
+      // Rate-limited or server-side error → wait and retry while attempts remain.
+      if ((res.status === 429 || res.status >= 500) && attempt < retries) {
+        const retryAfter = parseRetryAfter(res.headers && res.headers.get && res.headers.get('retry-after'));
+        await delay(retryAfter != null ? retryAfter : backoffDelay(attempt, retryBaseMs));
+        continue;
+      }
+      let errMsg = 'HTTP ' + res.status;
+      try {
+        const errData = await res.json();
+        errMsg = errData.error?.message || errData.message || errData.detail || errMsg;
+      } catch (e) {
+        try { errMsg = (await res.text()).slice(0, 200) || errMsg; } catch (e2) { /* ignore */ }
+      }
+      throw new Error(errMsg + ' (' + res.status + ')');
+    }
+
+    return res.json();
+  }
+  // Unreachable: the loop either returns a body or throws on the final attempt.
+  throw new Error(t('errNetwork', { msg: 'retries exhausted' }));
 }
 
 // Merge two connection entries (used when an id-keyed and a name-keyed entry
