@@ -252,10 +252,6 @@ select {
 .btn-sm:disabled { opacity: 0.3; cursor: not-allowed; }
 .btn-dl { color: var(--green); border-color: var(--green-border); }
 .btn-dl:hover:not(:disabled) { background: var(--green-bg); border-color: var(--green); color: var(--green); }
-.node-tags { display: flex; flex-wrap: wrap; gap: 5px; padding: 12px 16px; border-bottom: 1px solid var(--border); }.node-tag { padding: 3px 9px; border-radius: 4px; font-size: 11px; font-weight: 500; font-family: var(--mono); }
-.node-tag.trigger { background: var(--tag-trigger-bg); color: var(--tag-trigger-fg); }
-.node-tag.action { background: var(--green-bg); color: var(--green); }
-.node-tag.logic { background: var(--tag-logic-bg); color: var(--tag-logic-fg); }
 .output-code {
   padding: 16px; font-family: var(--mono); font-size: 11.5px;
   line-height: 1.7; color: var(--muted);
@@ -291,25 +287,65 @@ select {
 .wf-canvas { position: relative; }
 .wf-edges { position: absolute; top: 0; left: 0; pointer-events: none; }
 .wf-edge { stroke: var(--border-dark); stroke-width: 1.5; }
-.wf-node {
+/* Non-main (sub-node / AI) links render dashed, like n8n. */
+.wf-edge-sub { stroke-dasharray: 4 4; opacity: 0.8; }
+
+/* Node card: a rounded square holding the icon, with the name rendered below
+   it (n8n style). The wrapper is the focusable item and reserves room for the
+   label; the inner .wf-node is the visible card. */
+.wf-node-wrap {
   position: absolute; box-sizing: border-box;
-  display: flex; flex-direction: column; justify-content: center; gap: 2px;
-  padding: 6px 10px; border-radius: 8px; border: 1px solid var(--border-dark);
-  background: var(--surface); overflow: hidden;
+  outline: none; cursor: default;
 }
+.wf-node {
+  position: relative; width: 100%; height: 100%; box-sizing: border-box;
+  display: flex; align-items: center; justify-content: center;
+  border-radius: 16px; border: 1.5px solid var(--border-dark);
+  background: var(--surface); color: var(--muted);
+}
+.wf-node-wrap.trigger .wf-node {
+  /* Triggers get n8n's pill-left shape. */
+  border-radius: 44px 16px 16px 44px;
+}
+.wf-node-wrap:focus-visible .wf-node {
+  outline: 2px solid var(--text); outline-offset: 2px;
+}
+.wf-node-glyph { display: block; }
+/* Category drives the card accent (border + icon colour). */
+.wf-node.trigger { border-color: var(--tag-trigger-fg); color: var(--tag-trigger-fg); }
+.wf-node.action { border-color: var(--green); color: var(--green); }
+.wf-node.logic { border-color: var(--tag-logic-fg); color: var(--tag-logic-fg); }
+
+/* Input/output connection ports. */
+.wf-port {
+  position: absolute; top: 50%; width: 8px; height: 8px;
+  border-radius: 50%; background: var(--border-dark);
+  border: 1.5px solid var(--surface); transform: translateY(-50%);
+}
+.wf-port-in { left: -5px; }
+.wf-port-out { right: -5px; }
+
+/* Node name below the card. */
 .wf-node-name {
-  font-size: 12px; font-weight: 600; color: var(--text);
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  position: absolute; top: 100%; left: 50%; transform: translateX(-50%);
+  margin-top: 6px; width: 150px; text-align: center;
+  font-size: 11.5px; font-weight: 600; color: var(--text); line-height: 1.25;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+  overflow: hidden;
 }
-.wf-node-type {
-  font-size: 10px; font-family: var(--mono); color: var(--muted);
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+
+/* Sticky note: a translucent yellow card with its text. */
+.wf-sticky {
+  position: absolute; box-sizing: border-box; padding: 10px 12px;
+  border-radius: 8px; border: 1px solid var(--warn-border);
+  background: var(--warn-bg); color: var(--warn);
+  font-size: 11px; line-height: 1.4; overflow: hidden; outline: none;
 }
-/* Category shows as a coloured border around the whole node; the fill and the
-   node name stay neutral. */
-.wf-node.trigger { border: 2px solid var(--tag-trigger-fg); }
-.wf-node.action { border: 2px solid var(--green); }
-.wf-node.logic { border: 2px solid var(--tag-logic-fg); }
+.wf-sticky:focus-visible { outline: 2px solid var(--warn); outline-offset: 2px; }
+.wf-sticky-text {
+  display: -webkit-box; -webkit-line-clamp: 5; -webkit-box-orient: vertical;
+  overflow: hidden; white-space: pre-wrap; word-break: break-word;
+}
 .output-placeholder {
   padding: 48px 24px; display: flex; flex-direction: column;
   align-items: center; gap: 10px; color: var(--muted); text-align: center;

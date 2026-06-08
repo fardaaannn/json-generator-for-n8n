@@ -1,12 +1,17 @@
 import { getNodeClass } from './getNodeClass'
 
-// Node box geometry. NODE_W / NODE_H are also needed by the renderer (to size
-// the boxes and anchor the SVG edges), so they're exported.
-export const NODE_W = 150
-export const NODE_H = 52
-const GAP_X = 56
-const GAP_Y = 22
-const PAD = 16
+// Node box geometry. The card is a rounded square (icon inside, name rendered
+// below it, n8n-style); NODE_W / NODE_H are exported because the renderer needs
+// them to size the cards and anchor the SVG edges to each card's centre.
+export const NODE_W = 92
+export const NODE_H = 92
+const GAP_X = 76
+const GAP_Y = 58
+const PAD = 24
+// Extra room reserved around the grid so the name labels (which sit below each
+// card and can overhang sideways) aren't clipped by the canvas bounds.
+const LABEL_H = 34
+const SIDE_PAD = 40
 
 function shortType(type) {
   if (!type) return 'node'
@@ -37,9 +42,13 @@ export function computeLayout(workflow) {
   const byKey = new Map()
   nodes.forEach((n, i) => byKey.set(keyOf(n, i), n))
 
-  // Build adjacency (source -> [targets]) from connections.
+  // Build adjacency (source -> [targets]) plus a typed edge list. `adj` keeps
+  // plain target names (used for column levelling and the `outputs` field that
+  // assistive tech reads), while `edgeList` also records each connection's type
+  // so the renderer can dash non-main (sub-node / AI) links the way n8n does.
   const adj = new Map(order.map((k) => [k, []]))
   const indeg = new Map(order.map((k) => [k, 0]))
+  const edgeList = []
   const conns = (workflow.connections && typeof workflow.connections === 'object' && !Array.isArray(workflow.connections))
     ? workflow.connections : {}
 
@@ -56,6 +65,7 @@ export function computeLayout(workflow) {
           if (tName && byKey.has(tName) && tName !== source) {
             adj.get(source).push(tName)
             indeg.set(tName, (indeg.get(tName) || 0) + 1)
+            edgeList.push({ from: source, to: tName, type: outName || 'main' })
           }
         }
       }
@@ -100,31 +110,44 @@ export function computeLayout(workflow) {
   }
 
   const levels = Math.max(...Array.from(columns.keys())) + 1
-  const width = PAD * 2 + levels * NODE_W + (levels - 1) * GAP_X
-  const height = PAD * 2 + maxRows * NODE_H + (maxRows - 1) * GAP_Y
+  const width = PAD * 2 + levels * NODE_W + (levels - 1) * GAP_X + SIDE_PAD
+  const height = PAD * 2 + maxRows * NODE_H + (maxRows - 1) * GAP_Y + LABEL_H
 
   const edges = []
-  for (const src of order) {
-    for (const tgt of adj.get(src)) {
-      const a = pos.get(src)
-      const b = pos.get(tgt)
-      if (a && b) edges.push({ from: src, to: tgt, a, b })
-    }
+  for (const e of edgeList) {
+    const a = pos.get(e.from)
+    const b = pos.get(e.to)
+    if (a && b) edges.push({ from: e.from, to: e.to, type: e.type, a, b })
   }
 
   const boxes = order.map((k) => {
     const n = byKey.get(k) || {}
+    const rawType = (n && typeof n === 'object' && typeof n.type === 'string') ? n.type : ''
+    const cls = getNodeClass(rawType)
+    const isSticky = /stickynote/i.test(rawType)
+    const params = (n && typeof n === 'object' && n.parameters && typeof n.parameters === 'object') ? n.parameters : {}
     return {
       key: k,
-      name: n.name || shortType(n.type) || k,
-      type: shortType(n.type),
-      cls: getNodeClass(n.type),
+      name: n.name || shortType(rawType) || k,
+      type: shortType(rawType),
+      // Full node type (e.g. "n8n-nodes-base.webhook") so the renderer can pick
+      // the right icon; `type` stays the short form used by labels/tests.
+      rawType,
+      cls,
+      isTrigger: cls === 'trigger',
+      isSticky,
+      // Which ports to draw: input dot only when something feeds in, output dot
+      // only when the node feeds something.
+      hasInput: (indeg.get(k) || 0) > 0,
+      hasOutput: (adj.get(k) || []).length > 0,
+      // Sticky-note text (n8n stores it in parameters.content), shown verbatim.
+      content: isSticky && typeof params.content === 'string' ? params.content : '',
       outputs: adj.get(k) || [],
       ...pos.get(k),
     }
   })
 
-  return { boxes, edges, width: Math.max(width, 240), height: Math.max(height, NODE_H + PAD * 2) }
+  return { boxes, edges, width: Math.max(width, 240), height: Math.max(height, NODE_H + PAD * 2 + LABEL_H) }
 }
 
 /**
