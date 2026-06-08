@@ -326,6 +326,7 @@ export default function App() {
                     ))}
                     <option value="__custom__">{t('customOther')}</option>
                   </select>
+                  <p className="model-note">{t('modelQualityHint')}</p>
                   {needsKeyForModels && <p className="model-note">{t('modelsEnterKey')}</p>}
                   {modelsError && <p className="model-note">{t('modelsFetchError')}</p>}
                 </div>
