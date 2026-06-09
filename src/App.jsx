@@ -1,10 +1,12 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { PROVIDERS } from './lib/providers'
 import { EXAMPLES } from './lib/examples'
 import { fetchModels, getModelMeta, formatModelMeta } from './lib/modelCatalog'
 import { useLanguage } from './lib/i18n'
 import { useWorkflowGeneration } from './lib/useWorkflowGeneration'
 import { useN8nImport } from './lib/useN8nImport'
+import { formatRelativeTime, formatAbsoluteTime } from './lib/timeFormat'
+import { encodeWorkflow, decodeWorkflow, buildShareUrl, readShareParam } from './lib/shareLink'
 import Header from './components/Header'
 import Hero from './components/Hero'
 import References from './components/References'
@@ -44,6 +46,7 @@ export default function App() {
   const [showKey, setShowKey] = useState(false)
 
   const [copied, setCopied] = useState(false)
+  const [shareState, setShareState] = useState('') // '' | 'copied' | 'toolong'
   const [outputView, setOutputView] = useState('json')
 
   // "Edit an existing workflow": paste raw n8n JSON to load it for preview/
@@ -66,7 +69,7 @@ export default function App() {
     history, showHistory, setShowHistory,
     lastDiff, setLastDiff,
     generate, refine, restoreHistory, clearHistory,
-    loadWorkflow,
+    loadWorkflow, togglePin,
   } = gen
 
   useEffect(() => {
@@ -287,6 +290,51 @@ export default function App() {
     a.href = url; a.download = outputFilename; a.click()
     URL.revokeObjectURL(url)
   }, [currentJSON, outputFilename])
+
+  // Build a shareable link carrying the current workflow in the URL hash and
+  // copy it to the clipboard. The hash fragment never reaches the server, so
+  // (like the API keys) the workflow stays client-side. Very large workflows
+  // make impractically long URLs, so warn past a safe threshold and suggest
+  // Download instead.
+  const SHARE_MAX_URL = 12000
+  const handleShare = useCallback(async () => {
+    if (!currentJSON) return
+    try {
+      const token = await encodeWorkflow(currentJSON)
+      const url = buildShareUrl(token)
+      if (url.length > SHARE_MAX_URL) {
+        setShareState('toolong')
+        setTimeout(() => setShareState(''), 4000)
+        return
+      }
+      await navigator.clipboard.writeText(url)
+      setShareState('copied')
+      setTimeout(() => setShareState(''), 2000)
+    } catch (e) {
+      setShareState('toolong') // surface the generic "use Download" hint on any failure
+      setTimeout(() => setShareState(''), 4000)
+    }
+  }, [currentJSON])
+
+  // On first load, if the URL carries a shared workflow (#w=...), decode it and
+  // load it through the same path as a pasted workflow, then strip the hash so
+  // a refresh doesn't reload it and the URL stays clean. Guarded so React
+  // StrictMode's double-mount can't run it twice.
+  const sharedLoadedRef = useRef(false)
+  useEffect(() => {
+    if (sharedLoadedRef.current) return
+    sharedLoadedRef.current = true
+    const token = readShareParam()
+    if (!token) return
+    let cancelled = false
+    decodeWorkflow(token).then((json) => {
+      if (cancelled || !json) return
+      if (loadWorkflow(json)) {
+        try { window.history.replaceState(null, '', window.location.pathname + window.location.search) } catch (e) { /* ignore */ }
+      }
+    })
+    return () => { cancelled = true }
+  }, [loadWorkflow])
 
   const providerConfig = PROVIDERS[provider]
   const modelOptions = models
@@ -549,9 +597,17 @@ export default function App() {
             <span className="card-title">{t('outputTitle')}</span>
             <div style={{display:'flex', gap:'6px'}}>
               <button type="button" className="btn-sm" onClick={handleCopy} disabled={!currentJSON}>{copied ? t('copied') : t('copy')}</button>
+              <button type="button" className="btn-sm" onClick={handleShare} disabled={!currentJSON} title={t('shareBtn')}>
+                <span aria-hidden="true">&#128279; </span>{shareState === 'copied' ? t('shareCopied') : t('shareBtn')}
+              </button>
               <button type="button" className="btn-sm btn-dl" onClick={handleDownload} disabled={!currentJSON}><span aria-hidden="true">&darr; </span>{t('download')}</button>
             </div>
           </div>
+          {shareState === 'toolong' && (
+            <div className="warning-msg" role="status" style={{margin:'0 0 8px'}}>
+              <span aria-hidden="true">&#9888; </span>{t('shareTooLong')}
+            </div>
+          )}
           <div className="output-toolbar">
             <span className="output-filename">{outputFilename}</span>
             {currentJSON && (
@@ -751,10 +807,31 @@ export default function App() {
               {showHistory && (
                 <div className="history-body" id="history-body">
                   {history.map((h) => (
-                    <button key={h.id} type="button" className="history-item" onClick={() => restoreHistory(h)}>
-                      <span className="history-item-name">{h.name}</span>
-                      <span className="history-item-meta">{t('historyNodes', { n: h.nodeCount })}</span>
-                    </button>
+                    <div key={h.id} className={'history-item' + (h.pinned ? ' pinned' : '')}>
+                      <button
+                        type="button"
+                        className="history-item-main"
+                        onClick={() => restoreHistory(h)}
+                      >
+                        <span className="history-item-name">{h.pinned ? '\u2605 ' : ''}{h.name}</span>
+                        <span className="history-item-meta">
+                          {t('historyNodes', { n: h.nodeCount })}
+                          {h.ts ? (
+                            <> &middot; <span title={formatAbsoluteTime(h.ts, uiLang)}>{formatRelativeTime(h.ts, { lang: uiLang, justNow: t('historyJustNow') })}</span></>
+                          ) : null}
+                        </span>
+                      </button>
+                      <button
+                        type="button"
+                        className={'history-item-pin' + (h.pinned ? ' active' : '')}
+                        onClick={() => togglePin(h.id)}
+                        aria-pressed={!!h.pinned}
+                        aria-label={h.pinned ? t('historyUnpin') : t('historyPin')}
+                        title={h.pinned ? t('historyUnpin') : t('historyPin')}
+                      >
+                        {h.pinned ? '\u2605' : '\u2606'}
+                      </button>
+                    </div>
                   ))}
                   <button type="button" className="btn-sm history-clear" onClick={clearHistory}>{t('historyClear')}</button>
                 </div>
