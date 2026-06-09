@@ -1,4 +1,5 @@
 import { PROVIDERS } from './providers.js';
+import { assertHttpUrl } from './pipeline.js';
 
 // Live model-catalog fetching with a small localStorage cache.
 //
@@ -114,6 +115,21 @@ export async function fetchModels(providerKey, { apiKey = '', baseUrl = '', forc
   }
 
   const req = cfg.buildModelsRequest(apiKey, baseUrl);
+
+  // Defense-in-depth: the request URL is derived from a user-supplied base URL
+  // (for the Custom provider) and we attach the user's API key to it as a
+  // Bearer token. Validate the scheme before fetching so the credential can
+  // never be sent to a non-network scheme (javascript:, data:, file:, ...) if a
+  // malformed/hostile base URL reaches here. Mirrors the same guard applied on
+  // the generation path (see assertHttpUrl in pipeline.js). On an invalid URL,
+  // prefer any cached list, else signal "no live data" instead of throwing.
+  try {
+    assertHttpUrl(req.url);
+  } catch (e) {
+    const cached = readCache(key);
+    return (cached && cached.models.length) ? cached.models : null;
+  }
+
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeout);
 
