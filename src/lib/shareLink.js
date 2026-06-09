@@ -1,0 +1,122 @@
+// Share-via-URL: encode a workflow JSON string into a compact, URL-safe token
+// carried in the location hash (#w=...), and decode it back. Everything runs
+// client-side — the hash fragment is never sent to the server (privacy: the
+// same reason API keys never leave the browser), and no backend is involved.
+//
+// Compression uses the native gzip CompressionStream when available (zero
+// dependency), falling back to plain base64url when it isn't, so the feature
+// degrades gracefully on older browsers instead of failing. decode() auto-
+// detects which path produced a token, so links stay readable across browsers.
+
+const HASH_PREFIX = 'w='; // location.hash looks like "#w=<token>"
+// Tokens are tagged with a 1-char codec marker so decode knows how to reverse
+// them: 'g' = gzip+base64url, 'r' = raw base64url (no compression fallback).
+const CODEC_GZIP = 'g';
+const CODEC_RAW = 'r';
+
+// --- base64url helpers (no '+', '/', '=' so the token is URL/hash safe) ---
+
+function bytesToBase64Url(bytes) {
+  let bin = '';
+  for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
+  return btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+
+function base64UrlToBytes(b64url) {
+  let b64 = b64url.replace(/-/g, '+').replace(/_/g, '/');
+  while (b64.length % 4) b64 += '=';
+  const bin = atob(b64);
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  return bytes;
+}
+
+const hasCompressionStream =
+  typeof CompressionStream !== 'undefined' && typeof DecompressionStream !== 'undefined';
+
+async function gzipBytes(bytes) {
+  const cs = new CompressionStream('gzip');
+  const stream = new Response(bytes).body.pipeThrough(cs);
+  const buf = await new Response(stream).arrayBuffer();
+  return new Uint8Array(buf);
+}
+
+async function gunzipBytes(bytes) {
+  const ds = new DecompressionStream('gzip');
+  const stream = new Response(bytes).body.pipeThrough(ds);
+  const buf = await new Response(stream).arrayBuffer();
+  return new Uint8Array(buf);
+}
+
+/**
+ * Encode a JSON string into a URL-safe token (with a leading codec marker).
+ * @param {string} jsonString
+ * @returns {Promise<string>} the token, or '' for invalid input.
+ */
+export async function encodeWorkflow(jsonString) {
+  if (typeof jsonString !== 'string' || !jsonString) return '';
+  const utf8 = new TextEncoder().encode(jsonString);
+  if (hasCompressionStream) {
+    try {
+      const gz = await gzipBytes(utf8);
+      return CODEC_GZIP + bytesToBase64Url(gz);
+    } catch (e) {
+      // Fall through to the raw path if compression unexpectedly fails.
+    }
+  }
+  return CODEC_RAW + bytesToBase64Url(utf8);
+}
+
+/**
+ * Decode a token produced by encodeWorkflow back into the JSON string.
+ * Fail-soft: returns null on any malformed/corrupt input rather than throwing,
+ * so a bad link can never crash the app on load.
+ * @param {string} token
+ * @returns {Promise<string|null>}
+ */
+export async function decodeWorkflow(token) {
+  if (typeof token !== 'string' || token.length < 2) return null;
+  const codec = token[0];
+  const payload = token.slice(1);
+  try {
+    const bytes = base64UrlToBytes(payload);
+    if (codec === CODEC_GZIP) {
+      if (!hasCompressionStream) return null; // can't inflate without the API
+      const out = await gunzipBytes(bytes);
+      return new TextDecoder().decode(out);
+    }
+    if (codec === CODEC_RAW) {
+      return new TextDecoder().decode(bytes);
+    }
+    return null; // unknown codec marker
+  } catch (e) {
+    return null;
+  }
+}
+
+/**
+ * Build a full shareable URL for the current page carrying the token in the
+ * hash. Uses origin + pathname so query/hash leftovers are dropped.
+ * @param {string} token
+ * @param {Location|{origin:string,pathname:string}} [loc]
+ * @returns {string}
+ */
+export function buildShareUrl(token, loc = (typeof location !== 'undefined' ? location : null)) {
+  const origin = loc && loc.origin ? loc.origin : '';
+  const pathname = loc && loc.pathname ? loc.pathname : '/';
+  return origin + pathname + '#' + HASH_PREFIX + token;
+}
+
+/**
+ * Read the share token from a hash string (e.g. location.hash). Returns the
+ * token, or null when the hash isn't a share link.
+ * @param {string} [hash] defaults to location.hash
+ * @returns {string|null}
+ */
+export function readShareParam(hash = (typeof location !== 'undefined' ? location.hash : '')) {
+  if (typeof hash !== 'string') return null;
+  const h = hash.charAt(0) === '#' ? hash.slice(1) : hash;
+  if (!h.startsWith(HASH_PREFIX)) return null;
+  const token = h.slice(HASH_PREFIX.length);
+  return token || null;
+}
