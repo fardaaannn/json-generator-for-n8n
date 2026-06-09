@@ -3,6 +3,26 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <!--
+    Content-Security-Policy: this app stores the provider API key and (optionally)
+    the n8n API key in localStorage, so its whole security model rests on "no XSS
+    on this origin". A strict CSP is the single most effective mitigation: it
+    blocks injected or inline scripts (only our own same-origin bundle and the
+    external theme bootstrap are allowed via 'self') and disallows object/embed
+    and a rogue base element. connect-src intentionally allows any https host
+    (plus local n8n) because the "Custom / OpenAI-compatible" provider and the
+    n8n import feature are bring-your-own-URL and must reach arbitrary
+    user-supplied endpoints; it still blocks cleartext http exfiltration and
+    data:/ws: channels.
+    The ws://localhost entries are only there so Vite's dev-server HMR socket
+    works during `npm run dev`; they are inert in the deployed HTTPS build.
+    NOTE: frame-ancestors / X-Frame-Options cannot be set via meta on GitHub
+    Pages; clickjacking protection would need a real response header.
+  -->
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'self'; object-src 'none'; frame-src 'none'; form-action 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self' https: http://localhost:* http://127.0.0.1:* ws://localhost:* ws://127.0.0.1:*">
+  <meta name="referrer" content="strict-origin-when-cross-origin">
+
   <title>n8n Workflow Generator</title>
   <meta name="description" content="Generate ready-to-import n8n workflow JSON from a plain text description using AI. Supports Anthropic, OpenAI, Groq, OpenRouter, and OpenAI-compatible providers.">
   <meta name="theme-color" content="#F5F4EE" media="(prefers-color-scheme: light)">
@@ -21,20 +41,9 @@
   <link rel="icon" type="image/svg+xml" href="/favicon.svg">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 
-  <!-- Apply theme before paint to avoid a flash of the wrong theme -->
-  <script>
-    (function () {
-      try {
-        var stored = localStorage.getItem('n8n_gen_theme');
-        var theme = (stored === 'light' || stored === 'dark')
-          ? stored
-          : (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
-        document.documentElement.dataset.theme = theme;
-      } catch (e) {
-        document.documentElement.dataset.theme = 'light';
-      }
-    })();
-  </script>
+  <!-- Apply theme before paint to avoid a flash of the wrong theme.
+       External (not inline) so the CSP can stay 'script-src self' with no hash. -->
+  <script src="/theme-init.js"></script>
 </head>
 <body>
   <div id="root"></div>

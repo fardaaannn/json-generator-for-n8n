@@ -14,6 +14,7 @@ import {
   sendRequest,
   sendRequestStream,
   isResponseFormatError,
+  assertHttpUrl,
   SYSTEM_PROMPT,
 } from './pipeline'
 import { diffWorkflows } from './workflowDiff'
@@ -118,7 +119,16 @@ export function useWorkflowGeneration({ t, onRunStart }) {
     const effectiveModel = config.selectedModel === '__custom__' ? config.customModel : config.selectedModel
     if (!effectiveModel) return t('errEnterModel')
     if (!config.apiKey) return t('errEnterApiKey', { provider: cfg.name })
-    if (config.provider === 'custom' && !config.baseUrl) return t('errEnterBaseUrl')
+    if (config.provider === 'custom') {
+      if (!config.baseUrl) return t('errEnterBaseUrl')
+      // The custom Base URL is user-supplied and the API key is attached to it,
+      // so require a real http(s) endpoint before any request is built.
+      try {
+        assertHttpUrl(config.baseUrl, 'errBaseUrlInvalid', t)
+      } catch (e) {
+        return e.message
+      }
+    }
     return null
   }, [t])
 
