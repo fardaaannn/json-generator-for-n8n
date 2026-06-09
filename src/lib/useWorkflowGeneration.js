@@ -26,6 +26,22 @@ const N8N_VERSION = '1.x'
 
 const HISTORY_KEY = 'n8n_gen_history'
 const HISTORY_LIMIT = 10
+// Hard ceiling on total stored entries (pinned + unpinned) so heavy pinning
+// can't grow localStorage without bound. Pinned items are exempt from the
+// unpinned FIFO limit but still counted toward this cap; once it's reached, a
+// new pin is rejected (see togglePin) rather than silently evicting a pin.
+const HISTORY_MAX = 30
+
+// Re-apply the storage policy to a history array: pinned entries are kept
+// (newest first), unpinned entries are kept newest-first but capped to
+// HISTORY_LIMIT. Pinned always sort above unpinned. Pure so it's easy to reason
+// about and reuse from both pushHistory and togglePin.
+function applyHistoryPolicy(list) {
+  const arr = Array.isArray(list) ? list : []
+  const pinned = arr.filter((e) => e && e.pinned).sort((a, b) => (b.ts || 0) - (a.ts || 0))
+  const unpinned = arr.filter((e) => !e || !e.pinned).sort((a, b) => (b.ts || 0) - (a.ts || 0))
+  return [...pinned, ...unpinned.slice(0, HISTORY_LIMIT)]
+}
 
 /**
  * Owns everything about producing a workflow: the result/output state, the
@@ -66,7 +82,7 @@ export function useWorkflowGeneration({ t, onRunStart }) {
       const raw = localStorage.getItem(HISTORY_KEY)
       if (raw) {
         const parsed = JSON.parse(raw)
-        if (Array.isArray(parsed)) setHistory(parsed.slice(0, HISTORY_LIMIT))
+        if (Array.isArray(parsed)) setHistory(applyHistoryPolicy(parsed))
       }
     } catch (e) { /* ignore corrupted history */ }
   }, [])
@@ -77,13 +93,32 @@ export function useWorkflowGeneration({ t, onRunStart }) {
       name: (parsed && typeof parsed.name === 'string' && parsed.name) ? parsed.name : 'workflow',
       nodeCount: Array.isArray(parsed?.nodes) ? parsed.nodes.length : 0,
       ts: Date.now(),
+      pinned: false,
       json: pretty,
     }
     setHistory((prev) => {
-      const next = [entry, ...prev].slice(0, HISTORY_LIMIT)
+      const next = applyHistoryPolicy([entry, ...prev])
       try { localStorage.setItem(HISTORY_KEY, JSON.stringify(next)) } catch (e) { /* quota */ }
       return next
     })
+  }, [])
+
+  // Toggle the pinned flag on a history entry. Pinned entries survive the FIFO
+  // limit. Returns false (and makes no change) when trying to pin past the hard
+  // ceiling so localStorage can't grow unbounded; toggling OFF always works.
+  const togglePin = useCallback((id) => {
+    let ok = true
+    setHistory((prev) => {
+      const target = prev.find((e) => e.id === id)
+      if (!target) return prev
+      // Block a new pin only when at the ceiling AND we're pinning (not unpinning).
+      if (!target.pinned && prev.length >= HISTORY_MAX) { ok = false; return prev }
+      const updated = prev.map((e) => (e.id === id ? { ...e, pinned: !e.pinned } : e))
+      const next = applyHistoryPolicy(updated)
+      try { localStorage.setItem(HISTORY_KEY, JSON.stringify(next)) } catch (e) { /* quota */ }
+      return next
+    })
+    return ok
   }, [])
 
   // Apply a successfully parsed workflow to the output state. Shared by
@@ -387,5 +422,6 @@ export function useWorkflowGeneration({ t, onRunStart }) {
     loadWorkflow,
     restoreHistory,
     clearHistory,
+    togglePin,
   }
 }
