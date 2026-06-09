@@ -107,6 +107,7 @@ export const translations = {
     errEnterModel: 'Masukkan nama model',
     errEnterApiKey: 'Masukkan API key untuk provider {provider}',
     errEnterBaseUrl: 'Masukkan Base URL untuk custom provider',
+    errBaseUrlInvalid: 'Base URL tidak valid \u2014 gunakan URL http(s) lengkap, mis. https://api.example.com/v1.',
     errGenerateFailed: 'Gagal generate: {msg}',
     // pipeline
     warnNodesArray: '"nodes" harus berupa array',
@@ -146,6 +147,7 @@ export const translations = {
     n8nOpenWorkflow: 'Buka workflow',
     n8nImportHint: 'Hanya untuk n8n self-hosted yang mengizinkan origin situs ini via N8N_CORS_ALLOW_ORIGIN, dan instance bisa diakses (halaman HTTPS tidak bisa memanggil n8n HTTP/localhost). Kalau gagal, pakai Copy/Download lalu import manual.',
     errN8nNoUrl: 'Masukkan Base URL n8n kamu',
+    errN8nBadUrl: 'Base URL n8n tidak valid \u2014 gunakan URL http(s) lengkap, mis. https://n8n.example.com.',
     errN8nNoKey: 'Masukkan API key n8n kamu',
     errN8nNoWorkflow: 'Generate workflow dulu sebelum import',
     errN8nNetwork: 'Tidak bisa terhubung ke n8n. Kemungkinan diblokir CORS atau instance tidak dapat diakses. Pastikan N8N_CORS_ALLOW_ORIGIN mengizinkan situs ini.',
@@ -269,6 +271,7 @@ export const translations = {
     errEnterModel: 'Please enter a model name',
     errEnterApiKey: 'Please enter an API key for provider {provider}',
     errEnterBaseUrl: 'Please enter a Base URL for the custom provider',
+    errBaseUrlInvalid: 'Invalid Base URL \u2014 use a full http(s) URL, e.g. https://api.example.com/v1.',
     errGenerateFailed: 'Generation failed: {msg}',
     // pipeline
     warnNodesArray: '"nodes" must be an array',
@@ -308,6 +311,7 @@ export const translations = {
     n8nOpenWorkflow: 'Open workflow',
     n8nImportHint: 'Only works with a self-hosted n8n that allows this site\u2019s origin via N8N_CORS_ALLOW_ORIGIN and is reachable (an HTTPS page cannot call an HTTP/localhost n8n). If it fails, use Copy/Download and import manually.',
     errN8nNoUrl: 'Please enter your n8n Base URL',
+    errN8nBadUrl: 'Invalid n8n Base URL \u2014 use a full http(s) URL, e.g. https://n8n.example.com.',
     errN8nNoKey: 'Please enter your n8n API key',
     errN8nNoWorkflow: 'Generate a workflow before importing',
     errN8nNetwork: 'Could not reach n8n. It may be blocked by CORS or unreachable. Make sure N8N_CORS_ALLOW_ORIGIN allows this site.',

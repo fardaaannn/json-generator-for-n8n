@@ -14,6 +14,34 @@ const fallbackT = (key, params) => {
 };
 
 /**
+ * Validate a user-supplied base URL and return its normalized origin+path.
+ *
+ * The "Custom / OpenAI-compatible" provider and the n8n import feature both let
+ * the user type an arbitrary endpoint that we then send their API key to. This
+ * guards that input: it must parse as a URL and use the http: or https: scheme.
+ * Rejecting everything else stops the credential from being attached to a
+ * non-network scheme (javascript:, data:, file:, blob:, ...) if a malformed or
+ * malicious value ever reaches the request layer, and gives the user a clear
+ * error instead of an opaque "failed to fetch".
+ *
+ * @param {string} url   raw user input
+ * @param {string} errKey i18n key to throw with when invalid
+ * @returns {URL} the parsed URL
+ */
+export function assertHttpUrl(url, errKey = 'errBaseUrlInvalid', t = fallbackT) {
+  let parsed;
+  try {
+    parsed = new URL(String(url || '').trim());
+  } catch (e) {
+    throw new Error(t(errKey));
+  }
+  if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') {
+    throw new Error(t(errKey));
+  }
+  return parsed;
+}
+
+/**
  * Sanitize the user's free-text description.
  *
  * We intentionally do NOT strip "prompt-injection" phrases: a denylist is
@@ -518,6 +546,18 @@ export async function sendRequestStream(req, t = fallbackT, { onToken, timeout =
   return full;
 }
 
+// Connection source keys and output names come straight from model output or
+// pasted/untrusted workflow JSON. Assigning a key of "__proto__" (or
+// "constructor" / "prototype") via bracket notation walks the prototype chain
+// instead of creating a plain own property, which can corrupt the object (or,
+// in the wrong context, pollute a prototype). These are never valid n8n node or
+// output names, so we drop them defensively wherever we build an object from
+// such keys.
+const UNSAFE_OBJECT_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
+function isUnsafeKey(key) {
+  return typeof key !== 'string' || UNSAFE_OBJECT_KEYS.has(key);
+}
+
 // Merge two connection entries (used when an id-keyed and a name-keyed entry
 // collapse onto the same node after normalization — rare, but we don't want to
 // silently drop either one). Group arrays are concatenated per output index.
@@ -526,6 +566,7 @@ function mergeConnectionEntries(a, b) {
   if (!b || typeof b !== 'object' || Array.isArray(b)) return a;
   const out = { ...a };
   for (const key of Object.keys(b)) {
+    if (isUnsafeKey(key)) continue;
     const av = out[key];
     const bv = b[key];
     if (Array.isArray(av) && Array.isArray(bv)) {
@@ -580,6 +621,7 @@ export function normalizeConnections(workflow) {
     if (!outputs || typeof outputs !== 'object' || Array.isArray(outputs)) return outputs;
     const next = {};
     for (const outName of Object.keys(outputs)) {
+      if (isUnsafeKey(outName)) continue;
       const groups = outputs[outName];
       next[outName] = Array.isArray(groups)
         ? groups.map((group) => (Array.isArray(group)
@@ -595,6 +637,7 @@ export function normalizeConnections(workflow) {
   const next = {};
   for (const sourceKey of Object.keys(conns)) {
     const resolvedSource = resolve(sourceKey);
+    if (isUnsafeKey(resolvedSource)) continue;
     const remapped = remapOutputs(conns[sourceKey]);
     next[resolvedSource] = next[resolvedSource]
       ? mergeConnectionEntries(next[resolvedSource], remapped)
@@ -805,6 +848,9 @@ export function validateStructure(parsed, t = fallbackT) {
 export async function importToN8n({ baseUrl, apiKey, workflow }, t = fallbackT, { timeout = REQUEST_TIMEOUT_MS } = {}) {
   const cleanBase = (baseUrl || '').trim().replace(/\/+$/, '');
   if (!cleanBase) throw new Error(t('errN8nNoUrl'));
+  // Reject anything that isn't a real http(s) endpoint before attaching the
+  // n8n API key to the request (see assertHttpUrl).
+  assertHttpUrl(cleanBase, 'errN8nBadUrl', t);
   if (!apiKey) throw new Error(t('errN8nNoKey'));
   if (!workflow || typeof workflow !== 'object') throw new Error(t('errN8nNoWorkflow'));
 
