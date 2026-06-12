@@ -1,4 +1,5 @@
 import { isLikelyUnknownNodeType } from './n8nNodes.js';
+import { validateNodeParams } from './nodeSchemas.js';
 import { computeLayout } from './workflowLayout.js';
 import { interpolate } from './i18nData.js';
 
@@ -978,6 +979,9 @@ export function validateStructure(parsed, t = fallbackT) {
       }
       if (!n.position) warnings.push(t('warnNodeNoPos', { n: i + 1, name }));
       if (n.parameters === undefined) warnings.push(t('warnNodeNoParams', { n: i + 1, name }));
+      // Curated per-node parameter checks (missing/unknown/invalid params,
+      // implausible typeVersion) — see nodeSchemas.js. Non-blocking.
+      warnings.push(...validateNodeParams(n, t));
       if (n.name) {
         // n8n keys connections by node name and requires names to be unique.
         // Duplicates make connection references ambiguous on import and cause
