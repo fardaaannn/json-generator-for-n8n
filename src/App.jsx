@@ -5,6 +5,7 @@ import { fetchModels, getModelMeta, formatModelMeta } from './lib/modelCatalog'
 import { useLanguage } from './lib/useLanguage'
 import { useWorkflowGeneration } from './lib/useWorkflowGeneration'
 import { useN8nImport } from './lib/useN8nImport'
+import { loadStoredKeys, persistKeys, keyForProvider, setKeyForProvider } from './lib/apiKeyStore'
 import { formatRelativeTime, formatAbsoluteTime } from './lib/timeFormat'
 import { encodeWorkflow, decodeWorkflow, buildShareUrl, readShareParam } from './lib/shareLink'
 import Header from './components/Header'
@@ -49,8 +50,14 @@ export default function App() {
   // in the picker. Populated from the catalog cache after a list resolves.
   const [modelsMeta, setModelsMeta] = useState({})
 
-  const [apiKey, setApiKey] = useState('')
+  // Per-provider API keys (see lib/apiKeyStore.js). `apiKey` is derived for
+  // the active provider, with the migrated legacy key as a shared fallback.
+  const [apiKeys, setApiKeys] = useState({})
   const [rememberKey, setRememberKey] = useState(false)
+  const apiKey = keyForProvider(apiKeys, provider)
+  const handleApiKeyInput = useCallback((value) => {
+    setApiKeys((prev) => setKeyForProvider(prev, provider, value))
+  }, [provider])
   const [showKey, setShowKey] = useState(false)
 
   // '' | 'ok' | 'fail' — clipboard writes can be rejected (permissions,
@@ -83,10 +90,9 @@ export default function App() {
   } = gen
 
   useEffect(() => {
-    const storedKey = localStorage.getItem('n8n_gen_api_key')
-    const storedRemember = localStorage.getItem('n8n_gen_remember')
-    if (storedRemember === 'true' && storedKey) {
-      setApiKey(storedKey)
+    const { keys, remember } = loadStoredKeys()
+    if (remember && Object.keys(keys).length > 0) {
+      setApiKeys(keys)
       setRememberKey(true)
     }
     const storedBaseUrl = localStorage.getItem('n8n_gen_base_url')
@@ -107,11 +113,10 @@ export default function App() {
   // to the user via the "remember" warning notice. Keep this in mind before
   // adding any third-party scripts or untrusted markup to the page.
   useEffect(() => {
-    if (rememberKey && apiKey) {
-      localStorage.setItem('n8n_gen_api_key', apiKey)
-      localStorage.setItem('n8n_gen_remember', 'true')
+    if (rememberKey && Object.keys(apiKeys).length > 0) {
+      persistKeys(apiKeys, true)
     }
-  }, [apiKey, rememberKey])
+  }, [apiKeys, rememberKey])
 
   // Persist the custom provider's Base URL only while its "remember" toggle is
   // on. Unlike the API key this is not a secret, but it's still opt-in and
@@ -234,16 +239,8 @@ export default function App() {
   const handleRememberChange = useCallback((e) => {
     const checked = e.target.checked
     setRememberKey(checked)
-    if (checked) {
-      if (apiKey) {
-        localStorage.setItem('n8n_gen_api_key', apiKey)
-      }
-      localStorage.setItem('n8n_gen_remember', 'true')
-    } else {
-      localStorage.removeItem('n8n_gen_api_key')
-      localStorage.setItem('n8n_gen_remember', 'false')
-    }
-  }, [apiKey])
+    persistKeys(checked ? apiKeys : null, checked)
+  }, [apiKeys])
 
   const handleRememberBaseUrlChange = useCallback((e) => {
     const checked = e.target.checked
@@ -498,13 +495,13 @@ export default function App() {
                 </div>
               )}
               <div style={{marginTop:'10px'}}>
-                <label className="field-label" htmlFor="apiKey">{t('apiKey')} <span style={{fontWeight:400, opacity:0.7}}>{t('required')}</span></label>
+                <label className="field-label" htmlFor="apiKey">{t('apiKey')} <span style={{fontWeight:400, opacity:0.7}}>({providerConfig.name}) {t('required')}</span></label>
                 <div className="password-wrap">
                   <input
                     id="apiKey"
                     type={showKey ? 'text' : 'password'}
                     value={apiKey}
-                    onChange={(e) => setApiKey(e.target.value)}
+                    onChange={(e) => handleApiKeyInput(e.target.value)}
                     placeholder="sk-..."
                     aria-required="true"
                     autoComplete="off"
