@@ -89,6 +89,11 @@ export function useWorkflowGeneration({ t, onRunStart }) {
   // when not streaming (or once the final parsed result replaces it).
   const [streamingText, setStreamingText] = useState('')
   const [refineInstruction, setRefineInstruction] = useState('')
+  // Multi-turn refine context: the original description and the refine
+  // instructions successfully applied since the current workflow appeared.
+  // Replayed into buildRefinePrompt so later refines know cumulative intent.
+  // A ref (not state): it never affects rendering.
+  const convoRef = useRef({ description: null, instructions: [] })
   const [history, setHistory] = useState([])
   const [showHistory, setShowHistory] = useState(false)
   // Summary of what changed in the most recent refine (null until a refine
@@ -370,6 +375,8 @@ export function useWorkflowGeneration({ t, onRunStart }) {
     setCurrentJSON('')
     setWorkflowObj(null)
     setNodeTags([])
+    // A fresh generation starts a new refine conversation.
+    convoRef.current = { description: cleaned, instructions: [] }
     const prompt = buildPrompt({
       description: cleaned,
       name: config.wfName || 'My Workflow',
@@ -396,7 +403,13 @@ export function useWorkflowGeneration({ t, onRunStart }) {
       setErrorMsg(configError)
       return
     }
-    const prompt = buildRefinePrompt({ currentJSON, instruction, version: N8N_VERSION, lang: config.lang })
+    const prompt = buildRefinePrompt({
+      currentJSON,
+      instruction,
+      version: N8N_VERSION,
+      lang: config.lang,
+      context: { description: convoRef.current.description, previousInstructions: convoRef.current.instructions },
+    })
     // Capture the workflow as it is *now* so we can report what the refine
     // changed once the model returns the updated version.
     const before = workflowObj
@@ -408,6 +421,10 @@ export function useWorkflowGeneration({ t, onRunStart }) {
       onSuccess: (parsed) => {
         setRefineInstruction('')
         setLastDiff(diffWorkflows(before, parsed))
+        // Only successful refines join the conversation history (a failed run
+        // changed nothing, so replaying its instruction would mislead). Keep a
+        // bounded tail — the prompt builder clips further anyway.
+        convoRef.current.instructions = [...convoRef.current.instructions, instruction].slice(-20)
       },
     })
   }, [refineInstruction, workflowObj, currentJSON, t, validateConfig, runRequest])
@@ -437,6 +454,8 @@ export function useWorkflowGeneration({ t, onRunStart }) {
       return false
     }
     if (onRunStart) onRunStart('load')
+    // Pasted JSON is a new baseline: no original description, no prior turns.
+    convoRef.current = { description: null, instructions: [] }
     setErrorMsg('')
     setLastDiff(null)
     normalizeConnections(parsed)
@@ -459,6 +478,8 @@ export function useWorkflowGeneration({ t, onRunStart }) {
       setWasRepaired(false)
       setLastDiff(null)
       if (onRunStart) onRunStart('restore')
+      // A restored workflow is a new baseline for refines too.
+      convoRef.current = { description: null, instructions: [] }
       setErrorMsg('')
       setStatus({ state: 'done', key: 'statusDone', params: { n: Array.isArray(parsed.nodes) ? parsed.nodes.length : 0 } })
     } catch (e) {
