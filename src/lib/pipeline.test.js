@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, afterEach } from 'vitest'
 import {
   sanitizeInput,
   buildPrompt,
@@ -12,6 +12,7 @@ import {
   assertHttpUrl,
   isLocalHttpHost,
   isMaxTokensError,
+  importToN8n,
   EXAMPLE_JSON,
 } from './pipeline.js'
 
@@ -535,5 +536,79 @@ describe('normalizeConnections', () => {
     }
     const out = normalizeConnections(wf)
     expect(out.connections.Real.main[0][0].node).toBe('Ghost')
+  })
+})
+
+
+describe('importToN8n', () => {
+  const wf = { name: 'My WF', nodes: [{ id: '1' }], connections: {}, settings: {} }
+  const args = { baseUrl: 'https://n8n.example.com', apiKey: 'k', workflow: wf }
+
+  function stubFetch(impl) {
+    const calls = []
+    globalThis.fetch = async (url, opts) => {
+      calls.push({ url, opts })
+      return impl(url, opts)
+    }
+    return calls
+  }
+
+  const jsonResponse = (status, body) => ({
+    ok: status >= 200 && status < 300,
+    status,
+    json: async () => body,
+    text: async () => JSON.stringify(body),
+  })
+
+  afterEach(() => {
+    delete globalThis.fetch
+  })
+
+  it('POSTs a new workflow when no workflowId is given', async () => {
+    const calls = stubFetch(() => jsonResponse(200, { id: 'abc123' }))
+    const res = await importToN8n(args)
+    expect(calls).toHaveLength(1)
+    expect(calls[0].url).toBe('https://n8n.example.com/api/v1/workflows')
+    expect(calls[0].opts.method).toBe('POST')
+    expect(calls[0].opts.headers['X-N8N-API-KEY']).toBe('k')
+    // payload is sanitized to the strict create/update schema
+    expect(Object.keys(JSON.parse(calls[0].opts.body)).sort()).toEqual(['connections', 'name', 'nodes', 'settings'])
+    expect(res).toEqual({ id: 'abc123', updated: false, raw: { id: 'abc123' } })
+  })
+
+  it('PUTs to the existing workflow when workflowId is given', async () => {
+    const calls = stubFetch(() => jsonResponse(200, { id: 'abc123' }))
+    const res = await importToN8n({ ...args, workflowId: 'abc123' })
+    expect(calls[0].url).toBe('https://n8n.example.com/api/v1/workflows/abc123')
+    expect(calls[0].opts.method).toBe('PUT')
+    expect(res.updated).toBe(true)
+    expect(res.id).toBe('abc123')
+  })
+
+  it('URL-encodes the workflow id', async () => {
+    const calls = stubFetch(() => jsonResponse(200, {}))
+    await importToN8n({ ...args, workflowId: 'a/b c' })
+    expect(calls[0].url).toBe('https://n8n.example.com/api/v1/workflows/a%2Fb%20c')
+  })
+
+  it('falls back to the given id when the update response has none', async () => {
+    stubFetch(() => jsonResponse(200, {}))
+    const res = await importToN8n({ ...args, workflowId: 'xyz' })
+    expect(res.id).toBe('xyz')
+  })
+
+  it('reports a deleted linked workflow as errN8nGone (update only)', async () => {
+    stubFetch(() => jsonResponse(404, { message: 'not found' }))
+    await expect(importToN8n({ ...args, workflowId: 'gone' })).rejects.toThrow('errN8nGone')
+    // a plain create 404 is a generic failure, not "gone"
+    stubFetch(() => jsonResponse(404, { message: 'not found' }))
+    await expect(importToN8n(args)).rejects.toThrow('errN8nFailed')
+  })
+
+  it('maps auth and validation errors as before', async () => {
+    stubFetch(() => jsonResponse(401, {}))
+    await expect(importToN8n(args)).rejects.toThrow('errN8nAuth')
+    stubFetch(() => jsonResponse(400, { message: 'bad node' }))
+    await expect(importToN8n({ ...args, workflowId: 'id1' })).rejects.toThrow('errN8nBadRequest')
   })
 })

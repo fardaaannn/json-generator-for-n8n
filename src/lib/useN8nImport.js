@@ -27,6 +27,11 @@ export function useN8nImport({ t }) {
   const [n8nImporting, setN8nImporting] = useState(false)
   const [n8nResult, setN8nResult] = useState(null)
   const [n8nError, setN8nError] = useState('')
+  // The n8n workflow id of the last successful import this session. While
+  // set, the UI offers "update in n8n" so refine -> re-import doesn't create
+  // duplicates. Session-only on purpose: a persisted id could silently
+  // overwrite a workflow on a different visit.
+  const [linkedId, setLinkedId] = useState(null)
 
   // Restore remembered credentials on mount.
   useEffect(() => {
@@ -67,13 +72,22 @@ export function useN8nImport({ t }) {
   }, [n8nUrl, n8nApiKey])
 
   // Clear any previous import result/error. Called by the generation hook when
-  // a new generate/refine run starts so stale success banners don't linger.
-  const reset = useCallback(() => {
+  // a new run starts so stale success banners don't linger. Refine keeps the
+  // linked workflow id (same logical workflow, just improved); generating a
+  // brand-new workflow, pasting JSON, or restoring history drops the link so
+  // "update" can never hit an unrelated workflow.
+  const reset = useCallback((kind) => {
     setN8nResult(null)
     setN8nError('')
+    if (kind !== 'refine') setLinkedId(null)
   }, [])
 
-  const importWorkflow = useCallback(async (workflowObj) => {
+  /**
+   * Import the workflow into n8n. mode 'create' posts a new workflow;
+   * mode 'update' (only offered while a linked id exists) PUTs the previously
+   * imported one so refine iterations don't pile up duplicates.
+   */
+  const importWorkflow = useCallback(async (workflowObj, { mode = 'create' } = {}) => {
     setN8nError('')
     setN8nResult(null)
     if (!workflowObj) {
@@ -88,17 +102,22 @@ export function useN8nImport({ t }) {
       setN8nError(t('errN8nNoKey'))
       return
     }
+    const workflowId = mode === 'update' ? linkedId : undefined
     setN8nImporting(true)
     try {
-      const { id } = await importToN8n({ baseUrl: n8nUrl, apiKey: n8nApiKey, workflow: workflowObj }, t)
+      const { id, updated } = await importToN8n({ baseUrl: n8nUrl, apiKey: n8nApiKey, workflow: workflowObj, workflowId }, t)
       const base = n8nUrl.trim().replace(/\/+$/, '')
-      setN8nResult({ id, url: id ? base + '/workflow/' + id : '' })
+      setN8nResult({ id, updated, url: id ? base + '/workflow/' + id : '' })
+      if (id) setLinkedId(id)
     } catch (e) {
+      // A dead link (workflow deleted in n8n) is dropped so the next attempt
+      // creates a fresh workflow instead of failing forever.
+      if (workflowId && e.message === t('errN8nGone')) setLinkedId(null)
       setN8nError(e.message)
     } finally {
       setN8nImporting(false)
     }
-  }, [n8nUrl, n8nApiKey, t])
+  }, [n8nUrl, n8nApiKey, linkedId, t])
 
   return {
     showN8nImport, setShowN8nImport,
@@ -111,6 +130,7 @@ export function useN8nImport({ t }) {
     n8nError, setN8nError,
     handleRememberN8nChange,
     importWorkflow,
+    linkedId,
     reset,
   }
 }

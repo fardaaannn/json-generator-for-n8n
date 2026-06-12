@@ -69,7 +69,7 @@ function persistHistory(list) {
  *
  * @param {object} args
  * @param {(key: string, params?: object) => string} args.t  translator
- * @param {() => void} [args.onRunStart]  side-effect to run when a new
+ * @param {(kind?: string) => void} [args.onRunStart]  side-effect to run when a new
  *   generate/refine/restore begins (used to clear the n8n import banner).
  */
 export function useWorkflowGeneration({ t, onRunStart }) {
@@ -384,6 +384,7 @@ export function useWorkflowGeneration({ t, onRunStart }) {
       prompt,
       config,
       setBusy: setIsRefining,
+      kind: 'refine',
       onSuccess: (parsed) => {
         setRefineInstruction('')
         setLastDiff(diffWorkflows(before, parsed))
@@ -412,7 +413,7 @@ export function useWorkflowGeneration({ t, onRunStart }) {
       setErrorMsg(t('errWorkflowJsonShape'))
       return false
     }
-    if (onRunStart) onRunStart()
+    if (onRunStart) onRunStart('load')
     setErrorMsg('')
     setLastDiff(null)
     normalizeConnections(parsed)
@@ -434,7 +435,7 @@ export function useWorkflowGeneration({ t, onRunStart }) {
       setWarnings([])
       setWasRepaired(false)
       setLastDiff(null)
-      if (onRunStart) onRunStart()
+      if (onRunStart) onRunStart('restore')
       setErrorMsg('')
       setStatus({ state: 'done', key: 'statusDone', params: { n: Array.isArray(parsed.nodes) ? parsed.nodes.length : 0 } })
     } catch (e) {
