@@ -22,8 +22,11 @@ import NodeIcon from '../lib/nodeIcons'
  * (the nodes) are focusable and self-describing, so keyboard and screen-reader
  * users can traverse the workflow. The decorative SVG edges stay aria-hidden.
  */
-export default function WorkflowPreview({ workflow, t }) {
+export default function WorkflowPreview({ workflow, t, riskNames }) {
   const layout = useMemo(() => computeLayout(workflow), [workflow])
+  // Names of nodes flagged by the exfil-shape scan (lib/riskScan.js); they get
+  // a small "review" badge so outbound-data nodes stand out on the canvas.
+  const riskSet = useMemo(() => new Set(riskNames || []), [riskNames])
 
   if (!layout) {
     return <div className="wf-preview-empty">{t ? t('previewEmpty') : 'No nodes to preview'}</div>
@@ -70,20 +73,22 @@ export default function WorkflowPreview({ workflow, t }) {
               </div>
             )
           }
+          const isRisky = riskSet.has(b.name)
           return (
             <div
               key={b.key}
-              className={'wf-node-wrap' + (b.isTrigger ? ' trigger' : '')}
+              className={'wf-node-wrap' + (b.isTrigger ? ' trigger' : '') + (isRisky ? ' wf-node-risk' : '')}
               style={{ left: b.x, top: b.y, width: NODE_W, height: NODE_H }}
               role="listitem"
               tabIndex={0}
-              aria-label={nodeAriaLabel(b, tr)}
+              aria-label={nodeAriaLabel(b, tr) + (isRisky ? ' — ' + tr('riskBadge') : '')}
               title={b.name + ' (' + b.type + ')'}
             >
               <div className={'wf-node ' + b.cls} aria-hidden="true">
                 {b.hasInput && <span className="wf-port wf-port-in" />}
                 <NodeIcon type={b.rawType} />
                 {b.hasOutput && <span className="wf-port wf-port-out" />}
+                {isRisky && <span className="wf-risk-badge">{tr('riskBadge')}</span>}
               </div>
               <span className="wf-node-name" aria-hidden="true">{b.name}</span>
             </div>

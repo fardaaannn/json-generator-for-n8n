@@ -321,6 +321,23 @@ select {
 .wf-node-wrap:focus-visible .wf-node {
   outline: 2px solid var(--text); outline-offset: 2px;
 }
+/* Exfil-shape scan (riskScan.js): flagged nodes get a warn-coloured border and
+   a small "review" badge so outbound-data nodes stand out before import. */
+.wf-node-wrap.wf-node-risk .wf-node {
+  border-color: var(--warn);
+}
+.wf-risk-badge {
+  position: absolute; top: -9px; right: -6px;
+  padding: 1px 6px; border-radius: 8px;
+  font-size: 9px; font-weight: 700; letter-spacing: 0.02em; text-transform: uppercase;
+  background: var(--warn-bg); color: var(--warn);
+  border: 1px solid var(--warn-border);
+  pointer-events: none;
+}
+/* Auto-repair gets alert styling distinct from ordinary validation notes. */
+.warning-msg.warning-repaired {
+  border-left: 3px solid var(--warn);
+}
 .wf-node-glyph { display: block; }
 /* Category drives the card accent (border + icon colour). */
 .wf-node.trigger { border-color: var(--tag-trigger-fg); color: var(--tag-trigger-fg); }

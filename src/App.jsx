@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { PROVIDERS } from './lib/providers'
 import { EXAMPLES } from './lib/examples'
 import { fetchModels, getModelMeta, formatModelMeta } from './lib/modelCatalog'
@@ -8,6 +8,7 @@ import { useN8nImport } from './lib/useN8nImport'
 import { loadStoredKeys, persistKeys, keyForProvider, setKeyForProvider } from './lib/apiKeyStore'
 import { encodeWorkflow, decodeShare, buildShareUrl, readShareParam } from './lib/shareLink'
 import { findSecrets, describeFindings } from './lib/secretScan'
+import { findRiskyNodes, riskyNodeNames } from './lib/riskScan'
 import Header from './components/Header'
 import Hero from './components/Hero'
 import References from './components/References'
@@ -95,6 +96,13 @@ export default function App() {
     generate, refine, cancel, restoreHistory, clearHistory,
     loadWorkflow, togglePin,
   } = gen
+
+  // Exfil-shape scan over the current workflow (see lib/riskScan.js): nodes
+  // that send data out (POST/PUT/PATCH httpRequest) or whose code reads env
+  // vars / makes network calls get a review notice and a badge in the preview.
+  // Informational only — nothing is blocked.
+  const riskFindings = useMemo(() => findRiskyNodes(workflowObj), [workflowObj])
+  const riskNames = useMemo(() => riskyNodeNames(riskFindings), [riskFindings])
 
   useEffect(() => {
     const { keys, remember } = loadStoredKeys()
@@ -524,11 +532,33 @@ export default function App() {
               </div>
             )}
 
-            {(warnings.length > 0 || wasRepaired) && !errorMsg && (
+            {wasRepaired && !errorMsg && (
+              <div className="warning-msg warning-repaired" role="alert">
+                <strong><span aria-hidden="true">&#128295; </span>{t('warnRepairedTitle')}</strong> {t('warnRepairedBody')}
+              </div>
+            )}
+
+            {warnings.length > 0 && !errorMsg && (
               <div className="warning-msg" role="status">
                 <strong><span aria-hidden="true">&#9888; </span>{t('warningTitle')}</strong> {t('warningBody')}<br />
-                {wasRepaired && <span>&bull; {t('warnRepaired')}<br /></span>}
                 {warnings.map((w, i) => <span key={i}>&bull; {w}<br /></span>)}
+              </div>
+            )}
+
+            {riskFindings.length > 0 && !errorMsg && (
+              <div className="warning-msg" role="status">
+                <strong><span aria-hidden="true">&#128737; </span>{t('riskTitle')}</strong> {t('riskBody')}<br />
+                {riskFindings.map((f, i) => (
+                  <span key={i}>
+                    &bull;{' '}
+                    {f.kind === 'sendsData'
+                      ? t('riskSendsData', { node: f.name, host: f.host })
+                      : f.kind === 'readsEnv'
+                        ? t('riskReadsEnv', { node: f.name })
+                        : t('riskNetCode', { node: f.name })}
+                    <br />
+                  </span>
+                ))}
               </div>
             )}
           </div>
@@ -553,6 +583,7 @@ export default function App() {
             shareSecretsSummary={shareSecrets ? describeFindings(shareSecrets) : ''}
             handleShareAnyway={handleShareAnyway}
             handleShareCancel={handleShareCancel}
+            riskNames={riskNames}
           />
 
           <RefineDiff t={t} lastDiff={lastDiff} setLastDiff={setLastDiff} />
