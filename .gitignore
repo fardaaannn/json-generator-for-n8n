@@ -3,3 +3,7 @@ dist
 n8n_workflow_generator_v2.html
 Plan_v1___n8n_JSON_Generator.md
 bun.lock
+
+# Playwright
+playwright-report/
+test-results/
