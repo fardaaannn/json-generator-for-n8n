@@ -281,6 +281,12 @@ export default function App() {
     n8n.importWorkflow(workflowObj)
   }, [n8n, workflowObj])
 
+  // Update the workflow previously imported this session instead of creating
+  // a duplicate (offered only while an import link exists).
+  const handleUpdateInN8n = useCallback(() => {
+    n8n.importWorkflow(workflowObj, { mode: 'update' })
+  }, [n8n, workflowObj])
+
   const handleCopy = useCallback(() => {
     if (!currentJSON) return
     navigator.clipboard.writeText(currentJSON).then(() => {
@@ -787,16 +793,39 @@ export default function App() {
                   <input type="checkbox" checked={n8n.rememberN8n} onChange={n8n.handleRememberN8nChange} />
                   {t('n8nRemember')}
                 </label>
-                <button
-                  type="button"
-                  className="btn-primary"
-                  onClick={handleImportToN8n}
-                  disabled={!currentJSON || n8n.n8nImporting}
-                  aria-busy={n8n.n8nImporting}
-                >
-                  <span>{n8n.n8nImporting ? t('n8nImporting') : t('n8nImportBtn')}</span>
-                  <div className="spinner" style={{display: n8n.n8nImporting ? 'block' : 'none'}} aria-hidden="true"></div>
-                </button>
+                {n8n.linkedId ? (
+                  <div className="n8n-import-actions">
+                    <button
+                      type="button"
+                      className="btn-primary"
+                      onClick={handleUpdateInN8n}
+                      disabled={!currentJSON || n8n.n8nImporting}
+                      aria-busy={n8n.n8nImporting}
+                    >
+                      <span>{n8n.n8nImporting ? t('n8nImporting') : t('n8nUpdateBtn')}</span>
+                      <div className="spinner" style={{display: n8n.n8nImporting ? 'block' : 'none'}} aria-hidden="true"></div>
+                    </button>
+                    <button
+                      type="button"
+                      className="btn-secondary"
+                      onClick={handleImportToN8n}
+                      disabled={!currentJSON || n8n.n8nImporting}
+                    >
+                      <span>{t('n8nImportNewBtn')}</span>
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    className="btn-primary"
+                    onClick={handleImportToN8n}
+                    disabled={!currentJSON || n8n.n8nImporting}
+                    aria-busy={n8n.n8nImporting}
+                  >
+                    <span>{n8n.n8nImporting ? t('n8nImporting') : t('n8nImportBtn')}</span>
+                    <div className="spinner" style={{display: n8n.n8nImporting ? 'block' : 'none'}} aria-hidden="true"></div>
+                  </button>
+                )}
                 {n8n.n8nError && (
                   <div className="error-msg" role="alert">
                     <span aria-hidden="true">&#9888; </span>{n8n.n8nError}
@@ -804,7 +833,7 @@ export default function App() {
                 )}
                 {n8n.n8nResult && (
                   <div className="success-msg" role="status">
-                    <span aria-hidden="true">&#10003; </span>{t('n8nImportSuccess')}
+                    <span aria-hidden="true">&#10003; </span>{n8n.n8nResult.updated ? t('n8nUpdateSuccess') : t('n8nImportSuccess')}
                     {n8n.n8nResult.url && (
                       <> <a href={n8n.n8nResult.url} target="_blank" rel="noopener noreferrer">{t('n8nOpenWorkflow')}</a></>
                     )}

@@ -172,6 +172,10 @@ export const translations = {
     errN8nAuth: 'API key n8n ditolak \u2014 cek key dan permission-nya.',
     errN8nBadRequest: 'n8n menolak workflow: {msg}',
     errN8nFailed: 'Gagal import ke n8n: {msg}',
+    errN8nGone: 'Workflow yang ditautkan sudah tidak ada di n8n (mungkin dihapus). Klik import lagi untuk membuat workflow baru.',
+    n8nUpdateBtn: 'Update workflow di n8n',
+    n8nImportNewBtn: 'Import sebagai baru',
+    n8nUpdateSuccess: 'Berhasil! Workflow di n8n kamu sudah diperbarui.',
     // footer
     footerMessage: 'Dibuat oleh Fardan dan Claude. Kamu ada saran, kritik atau masukan? Boleh banget hubungi kami lewat kontak di bawah yaa. Semangat bikin workflow-nya!!',
     footerSource: 'Repo Github',
@@ -350,6 +354,10 @@ export const translations = {
     errN8nAuth: 'The n8n API key was rejected \u2014 check the key and its permissions.',
     errN8nBadRequest: 'n8n rejected the workflow: {msg}',
     errN8nFailed: 'Failed to import to n8n: {msg}',
+    errN8nGone: 'The linked workflow no longer exists in n8n (it may have been deleted). Import again to create a new one.',
+    n8nUpdateBtn: 'Update workflow in n8n',
+    n8nImportNewBtn: 'Import as new',
+    n8nUpdateSuccess: 'Success! The workflow in your n8n was updated.',
     // footer
     footerMessage: 'Made by Fardan and Claude. Got any suggestions, critiques, or feedback? Feel free to reach out via the contacts below. Happy workflow building!!',
     footerSource: 'Github Repo',

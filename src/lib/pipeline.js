@@ -956,7 +956,7 @@ export function validateStructure(parsed, t = fallbackT) {
  * @param {{baseUrl: string, apiKey: string, workflow: object}} args
  * @returns {Promise<{id: (string|undefined), raw: object}>}
  */
-export async function importToN8n({ baseUrl, apiKey, workflow }, t = fallbackT, { timeout = REQUEST_TIMEOUT_MS } = {}) {
+export async function importToN8n({ baseUrl, apiKey, workflow, workflowId }, t = fallbackT, { timeout = REQUEST_TIMEOUT_MS } = {}) {
   const cleanBase = (baseUrl || '').trim().replace(/\/+$/, '');
   if (!cleanBase) throw new Error(t('errN8nNoUrl'));
   // Reject anything that isn't a real http(s) endpoint before attaching the
@@ -976,13 +976,17 @@ export async function importToN8n({ baseUrl, apiKey, workflow }, t = fallbackT, 
     settings: (workflow.settings && typeof workflow.settings === 'object' && !Array.isArray(workflow.settings)) ? workflow.settings : {},
   };
 
-  const url = cleanBase + '/api/v1/workflows';
+  // With a workflowId this becomes an update (PUT) of the previously imported
+  // workflow instead of creating a duplicate. The update endpoint accepts the
+  // same minimal schema as create.
+  const isUpdate = !!workflowId;
+  const url = cleanBase + '/api/v1/workflows' + (isUpdate ? '/' + encodeURIComponent(workflowId) : '');
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeout);
   let res;
   try {
     res = await fetch(url, {
-      method: 'POST',
+      method: isUpdate ? 'PUT' : 'POST',
       headers: {
         'Content-Type': 'application/json',
         'X-N8N-API-KEY': apiKey,
@@ -1016,6 +1020,11 @@ export async function importToN8n({ baseUrl, apiKey, workflow }, t = fallbackT, 
     if (res.status === 401 || res.status === 403) {
       throw new Error(t('errN8nAuth'));
     }
+    if (isUpdate && res.status === 404) {
+      // The linked workflow no longer exists on the instance (deleted there).
+      // The caller drops the link so the next import creates a fresh one.
+      throw new Error(t('errN8nGone'));
+    }
     if (res.status === 400) {
       throw new Error(t('errN8nBadRequest', { msg: detail }));
     }
@@ -1023,6 +1032,6 @@ export async function importToN8n({ baseUrl, apiKey, workflow }, t = fallbackT, 
   }
 
   const data = await res.json().catch(() => ({}));
-  const id = data.id || data.data?.id;
-  return { id, raw: data };
+  const id = data.id || data.data?.id || (isUpdate ? workflowId : undefined);
+  return { id, updated: isUpdate, raw: data };
 }
