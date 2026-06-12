@@ -7,6 +7,7 @@ import { useWorkflowGeneration } from './lib/useWorkflowGeneration'
 import { useN8nImport } from './lib/useN8nImport'
 import { loadStoredKeys, persistKeys, keyForProvider, setKeyForProvider } from './lib/apiKeyStore'
 import { encodeWorkflow, decodeShare, buildShareUrl, readShareParam } from './lib/shareLink'
+import { findSecrets, describeFindings } from './lib/secretScan'
 import Header from './components/Header'
 import Hero from './components/Hero'
 import References from './components/References'
@@ -67,6 +68,9 @@ export default function App() {
   // insecure context), so failure gets surfaced on the button too.
   const [copied, setCopied] = useState('')
   const [shareState, setShareState] = useState('') // '' | 'copied' | 'toolong'
+  // Secret-scan findings blocking a share, or null when no confirmation is
+  // pending. See handleShare.
+  const [shareSecrets, setShareSecrets] = useState(null)
   const [outputView, setOutputView] = useState('json')
 
   // "Edit an existing workflow": paste raw n8n JSON to load it for preview/
@@ -318,8 +322,7 @@ export default function App() {
   // make impractically long URLs, so warn past a safe threshold and suggest
   // Download instead.
   const SHARE_MAX_URL = 12000
-  const handleShare = useCallback(async () => {
-    if (!currentJSON) return
+  const doShare = useCallback(async () => {
     try {
       const token = await encodeWorkflow(currentJSON)
       const url = buildShareUrl(token)
@@ -336,6 +339,30 @@ export default function App() {
       setTimeout(() => setShareState(''), 4000)
     }
   }, [currentJSON])
+
+  // Pre-share secret scan: a share link embeds the entire workflow in the URL,
+  // so an API key sitting in a node parameter would leak to everyone the link
+  // reaches. If the JSON looks like it contains credentials, pause and make
+  // the user explicitly confirm (or cancel and clean up) instead of silently
+  // encoding them into the link.
+  const handleShare = useCallback(async () => {
+    if (!currentJSON) return
+    const findings = findSecrets(currentJSON)
+    if (findings.length > 0) {
+      setShareSecrets(findings)
+      return
+    }
+    await doShare()
+  }, [currentJSON, doShare])
+
+  const handleShareAnyway = useCallback(async () => {
+    setShareSecrets(null)
+    await doShare()
+  }, [doShare])
+
+  const handleShareCancel = useCallback(() => {
+    setShareSecrets(null)
+  }, [])
 
   // On first load, if the URL carries a shared workflow (#w=...), decode it and
   // load it through the same path as a pasted workflow, then strip the hash so
@@ -522,6 +549,10 @@ export default function App() {
             shareState={shareState}
             handleShare={handleShare}
             handleDownload={handleDownload}
+            shareSecrets={shareSecrets}
+            shareSecretsSummary={shareSecrets ? describeFindings(shareSecrets) : ''}
+            handleShareAnyway={handleShareAnyway}
+            handleShareCancel={handleShareCancel}
           />
 
           <RefineDiff t={t} lastDiff={lastDiff} setLastDiff={setLastDiff} />

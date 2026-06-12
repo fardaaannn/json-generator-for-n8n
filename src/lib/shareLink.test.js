@@ -5,6 +5,7 @@ import {
   decodeShare,
   buildShareUrl,
   readShareParam,
+  MAX_DECODED_BYTES,
 } from './shareLink.js'
 
 const sampleWorkflow = JSON.stringify({
@@ -148,5 +149,43 @@ describe('share link format versioning', () => {
     const tok = '1r' + toBase64Url(JSON.stringify({ v: 1, w: wfObj }))
     const res = await decodeShare(tok)
     expect(JSON.parse(res.json)).toEqual(wfObj)
+  })
+})
+
+describe('decompression-bomb guard', () => {
+  it('exports a sane cap constant', () => {
+    expect(MAX_DECODED_BYTES).toBe(5 * 1024 * 1024)
+  })
+
+  it('still round-trips normal workflows under the cap', async () => {
+    const token = await encodeWorkflow(sampleWorkflow)
+    expect(await decodeWorkflow(token)).toBe(sampleWorkflow)
+  })
+
+  it('rejects a gzip token that inflates past the cap (fail-soft null)', async () => {
+    // ~6 MB of a single repeated character compresses to a few KB — exactly
+    // the shape of a decompression bomb carried in a share link.
+    const bomb = JSON.stringify({ v: 1, ts: 0, w: 'x'.repeat(6 * 1024 * 1024) })
+    const cs = new CompressionStream('gzip')
+    const stream = new Response(new TextEncoder().encode(bomb)).body.pipeThrough(cs)
+    const gz = new Uint8Array(await new Response(stream).arrayBuffer())
+    // Token is tiny even though the payload is 6 MB inflated.
+    expect(gz.length).toBeLessThan(64 * 1024)
+    let bin = ''
+    for (let i = 0; i < gz.length; i++) bin += String.fromCharCode(gz[i])
+    const token = '1g' + btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
+
+    expect(await decodeWorkflow(token)).toBeNull()
+    const res = await decodeShare(token)
+    expect(res.json).toBeNull()
+    expect(res.error).toBe('corrupt')
+  })
+
+  it('rejects an oversized raw (uncompressed) token too', async () => {
+    // raw payload above the cap -> corrupt, app never JSON.parses it
+    const big = 'y'.repeat(MAX_DECODED_BYTES + 1024)
+    const res = await decodeShare('1r' + toBase64Url(big))
+    expect(res.json).toBeNull()
+    expect(res.error).toBe('corrupt')
   })
 })

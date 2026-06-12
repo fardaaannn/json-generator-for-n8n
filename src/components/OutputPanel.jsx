@@ -3,7 +3,7 @@ import WorkflowPreview from './WorkflowPreview'
 // Output card top half: copy/share/download actions, filename + JSON/preview
 // view toggle, the output itself (code, live stream, or placeholder), and the
 // status bar. All state lives in App; this is presentational.
-export default function OutputPanel({ t, currentJSON, workflowObj, streamingText, status, outputView, setOutputView, outputFilename, copied, handleCopy, shareState, handleShare, handleDownload }) {
+export default function OutputPanel({ t, currentJSON, workflowObj, streamingText, status, outputView, setOutputView, outputFilename, copied, handleCopy, shareState, handleShare, handleDownload, shareSecrets, shareSecretsSummary, handleShareAnyway, handleShareCancel }) {
   return (
     <>
     <div className="card-header">
@@ -19,6 +19,16 @@ export default function OutputPanel({ t, currentJSON, workflowObj, streamingText
         {shareState === 'toolong' && (
           <div className="warning-msg" role="status" style={{margin:'0 0 8px'}}>
             <span aria-hidden="true">&#9888; </span>{t('shareTooLong')}
+          </div>
+        )}
+        {shareSecrets && shareSecrets.length > 0 && (
+          <div className="warning-msg" role="alert" style={{margin:'0 0 8px'}}>
+            <strong><span aria-hidden="true">&#9888; </span>{t('shareSecretsTitle')}</strong>{' '}
+            {t('shareSecretsBody', { findings: shareSecretsSummary })}
+            <div style={{display:'flex', gap:'6px', marginTop:'8px'}}>
+              <button type="button" className="btn-sm" onClick={handleShareCancel}>{t('shareSecretsCancel')}</button>
+              <button type="button" className="btn-sm" onClick={handleShareAnyway}>{t('shareSecretsAnyway')}</button>
+            </div>
           </div>
         )}
         <div className="output-toolbar">
