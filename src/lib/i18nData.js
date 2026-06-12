@@ -116,6 +116,10 @@ export const translations = {
     shareLoaded: 'Workflow dimuat dari link yang dibagikan.',
     errShareVersion: 'Link share ini dibuat dengan versi app yang lebih baru. Refresh halaman (atau buka versi terbaru) lalu coba lagi.',
     errShareCorrupt: 'Link share ini tidak bisa dibaca — mungkin terpotong saat disalin. Minta link baru, lalu pastikan tersalin utuh.',
+    shareSecretsTitle: 'Workflow ini sepertinya berisi secret:',
+    shareSecretsBody: '{findings}. Link share memuat seluruh workflow di URL, jadi siapa pun yang menerima link bisa melihatnya. Hapus dulu secret-nya (pakai credential n8n sebagai gantinya), atau lanjut jika kamu yakin.',
+    shareSecretsCancel: 'Batal',
+    shareSecretsAnyway: 'Tetap bagikan',
     // Status
     statusReady: 'Siap',
     statusGenerating: 'Membuat workflow...',
@@ -311,6 +315,10 @@ export const translations = {
     shareLoaded: 'Workflow loaded from a shared link.',
     errShareVersion: 'This share link was created with a newer version of the app. Refresh the page (or open the latest version) and try again.',
     errShareCorrupt: 'This share link could not be read — it may have been truncated when copied. Ask for a new link and make sure it copies completely.',
+    shareSecretsTitle: 'This workflow looks like it contains secrets:',
+    shareSecretsBody: '{findings}. A share link embeds the whole workflow in the URL, so anyone who gets the link can read them. Remove the secrets first (use n8n credentials instead), or continue if you are sure.',
+    shareSecretsCancel: 'Cancel',
+    shareSecretsAnyway: 'Share anyway',
     // Status
     statusReady: 'Ready',
     statusGenerating: 'Generating workflow...',

@@ -45,6 +45,14 @@ function base64UrlToBytes(b64url) {
 const hasCompressionStream =
   typeof CompressionStream !== 'undefined' && typeof DecompressionStream !== 'undefined';
 
+// Decompression-bomb guard: a tiny crafted token (a few KB of highly
+// repetitive gzip) can inflate to hundreds of MB and freeze or crash the tab
+// of whoever opens the link. Legit share payloads are bounded far below this
+// (the share URL itself is capped around 12 KB), so 5 MB of decompressed JSON
+// leaves enormous headroom while still neutralizing bombs. Exceeding the cap
+// is treated like any other corrupt token (fail-soft -> null).
+export const MAX_DECODED_BYTES = 5 * 1024 * 1024;
+
 async function gzipBytes(bytes) {
   const cs = new CompressionStream('gzip');
   const stream = new Response(bytes).body.pipeThrough(cs);
@@ -52,11 +60,33 @@ async function gzipBytes(bytes) {
   return new Uint8Array(buf);
 }
 
+// Inflate with a hard cap on the output size: read the stream chunk by chunk
+// and bail out the moment the running total crosses MAX_DECODED_BYTES, instead
+// of buffering the whole (potentially huge) result like Response.arrayBuffer()
+// would.
 async function gunzipBytes(bytes) {
   const ds = new DecompressionStream('gzip');
   const stream = new Response(bytes).body.pipeThrough(ds);
-  const buf = await new Response(stream).arrayBuffer();
-  return new Uint8Array(buf);
+  const reader = stream.getReader();
+  const chunks = [];
+  let total = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    total += value.length;
+    if (total > MAX_DECODED_BYTES) {
+      try { await reader.cancel(); } catch (e) { /* already failing */ }
+      throw new Error('decompressed share payload exceeds size limit');
+    }
+    chunks.push(value);
+  }
+  const out = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) {
+    out.set(chunk, offset);
+    offset += chunk.length;
+  }
+  return out;
 }
 
 /**
@@ -147,6 +177,9 @@ async function decodePayload(rest) {
   const payload = rest.slice(1);
   try {
     const bytes = base64UrlToBytes(payload);
+    // The raw path can't "expand", but cap it anyway so both codecs share the
+    // same upper bound on what a token may hand to JSON.parse.
+    if (bytes.length > MAX_DECODED_BYTES) return null;
     if (codec === CODEC_GZIP) {
       if (!hasCompressionStream) return null; // can't inflate without the API
       const out = await gunzipBytes(bytes);
