@@ -309,8 +309,8 @@ describe('validateStructure', () => {
   const validWorkflow = {
     name: 'My Workflow',
     nodes: [
-      { id: '1', name: 'Webhook', type: 'n8n-nodes-base.webhook', position: [0, 0], parameters: {} },
-      { id: '2', name: 'HTTP', type: 'n8n-nodes-base.httpRequest', position: [200, 0], parameters: {} },
+      { id: '1', name: 'Webhook', type: 'n8n-nodes-base.webhook', position: [0, 0], parameters: { path: 'my-hook' } },
+      { id: '2', name: 'HTTP', type: 'n8n-nodes-base.httpRequest', position: [200, 0], parameters: { url: 'https://api.example.com' } },
     ],
     connections: {
       Webhook: { main: [[{ node: 'HTTP', type: 'main', index: 0 }]] },

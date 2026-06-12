@@ -7,7 +7,7 @@ import { test, expect } from '@playwright/test'
 const sampleWorkflow = {
   name: 'Daily Slack Ping',
   nodes: [
-    { id: 'a1', name: 'Daily Schedule', type: 'n8n-nodes-base.scheduleTrigger', position: [240, 300], parameters: {} },
+    { id: 'a1', name: 'Daily Schedule', type: 'n8n-nodes-base.scheduleTrigger', position: [240, 300], parameters: { rule: { interval: [{ field: 'hours', hoursInterval: 24 }] } } },
     { id: 'b2', name: 'Send Slack', type: 'n8n-nodes-base.slack', position: [460, 300], parameters: { channel: '#notif' } },
   ],
   connections: { 'Daily Schedule': { main: [[{ node: 'Send Slack', type: 'main', index: 0 }]] } },
