@@ -85,3 +85,14 @@ test('full generate flow against a stubbed provider', async ({ page }) => {
   await expect(page.locator('.status-bar')).toContainText(/done/i)
   await expect(page.getByRole('alert')).toHaveCount(0)
 })
+
+test('a gallery entry loads into the output panel', async ({ page }) => {
+  await page.goto('')
+  await page.getByRole('button', { name: /public workflow gallery/i }).click()
+  // Entries come from the static gallery.json served next to the app.
+  const firstLoad = page.getByRole('button', { name: /^load$/i }).first()
+  await expect(firstLoad).toBeVisible()
+  await firstLoad.click()
+  await expect(page.locator('pre.output-code')).toContainText('Webhook to Slack')
+  await expect(page.getByRole('alert')).toHaveCount(0)
+})
