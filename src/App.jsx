@@ -13,6 +13,7 @@ import References from './components/References'
 import Footer from './components/Footer'
 import OutputPanel from './components/OutputPanel'
 import EditExistingPanel from './components/EditExistingPanel'
+import GalleryPanel from './components/GalleryPanel'
 import ProviderSettings from './components/ProviderSettings'
 import GenerationOptions from './components/GenerationOptions'
 import RefineDiff from './components/RefineDiff'
@@ -362,6 +363,17 @@ export default function App() {
     return () => { cancelled = true }
   }, [loadWorkflow, setErrorMsg, t])
 
+  // Load a gallery entry: same decodeShare -> loadWorkflow path as a #w= share
+  // link, so versioning and corruption handling behave identically.
+  const handleGalleryLoad = useCallback(async (token) => {
+    const { json, error } = await decodeShare(token)
+    if (!json) {
+      setErrorMsg(t(error === 'unsupported-version' ? 'errShareVersion' : 'errShareCorrupt'))
+      return
+    }
+    loadWorkflow(json)
+  }, [loadWorkflow, setErrorMsg, t])
+
   const providerConfig = PROVIDERS[provider]
   const modelOptions = models
   const recommendedSet = new Set(providerConfig.recommended || [])
@@ -418,6 +430,8 @@ export default function App() {
               setErrorMsg={setErrorMsg}
               handleLoadWorkflow={handleLoadWorkflow}
             />
+
+            <GalleryPanel t={t} uiLang={uiLang} onLoadEntry={handleGalleryLoad} />
 
             <div className="divider"></div>
 

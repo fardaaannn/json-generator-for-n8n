@@ -1,0 +1,58 @@
+{
+  "version": 1,
+  "items": [
+    {
+      "id": "webhook-slack",
+      "title": {
+        "id": "Notifikasi Webhook ke Slack",
+        "en": "Webhook to Slack Notification"
+      },
+      "description": {
+        "id": "Terima event lewat webhook dan kirim notifikasinya ke channel Slack.",
+        "en": "Receive an event via webhook and post a notification to a Slack channel."
+      },
+      "tags": [
+        "webhook",
+        "slack"
+      ],
+      "nodes": 2,
+      "token": "1reyJ2IjoxLCJ0cyI6MTc4MTI0MDAwMCwidyI6IntcIm5hbWVcIjpcIldlYmhvb2sgdG8gU2xhY2sgTm90aWZpY2F0aW9uXCIsXCJub2Rlc1wiOlt7XCJpZFwiOlwiYTFcIixcIm5hbWVcIjpcIkluY29taW5nIFdlYmhvb2tcIixcInR5cGVcIjpcIm44bi1ub2Rlcy1iYXNlLndlYmhvb2tcIixcInR5cGVWZXJzaW9uXCI6MixcInBvc2l0aW9uXCI6WzI0MCwzMDBdLFwicGFyYW1ldGVyc1wiOntcInBhdGhcIjpcIm5vdGlmeVwiLFwiaHR0cE1ldGhvZFwiOlwiUE9TVFwiLFwicmVzcG9uc2VNb2RlXCI6XCJvblJlY2VpdmVkXCJ9fSx7XCJpZFwiOlwiYjJcIixcIm5hbWVcIjpcIlNlbmQgU2xhY2sgTWVzc2FnZVwiLFwidHlwZVwiOlwibjhuLW5vZGVzLWJhc2Uuc2xhY2tcIixcInR5cGVWZXJzaW9uXCI6Mi4yLFwicG9zaXRpb25cIjpbNDYwLDMwMF0sXCJwYXJhbWV0ZXJzXCI6e1wicmVzb3VyY2VcIjpcIm1lc3NhZ2VcIixcIm9wZXJhdGlvblwiOlwicG9zdFwiLFwic2VsZWN0XCI6XCJjaGFubmVsXCIsXCJjaGFubmVsSWRcIjpcIiNhbGVydHNcIixcInRleHRcIjpcIj1OZXcgZXZlbnQgcmVjZWl2ZWQ6IHt7ICRqc29uLmJvZHkuZXZlbnQgfHwgJ3Vua25vd24nIH19XCJ9fV0sXCJjb25uZWN0aW9uc1wiOntcIkluY29taW5nIFdlYmhvb2tcIjp7XCJtYWluXCI6W1t7XCJub2RlXCI6XCJTZW5kIFNsYWNrIE1lc3NhZ2VcIixcInR5cGVcIjpcIm1haW5cIixcImluZGV4XCI6MH1dXX19LFwiYWN0aXZlXCI6ZmFsc2UsXCJzZXR0aW5nc1wiOnt9fSJ9"
+    },
+    {
+      "id": "api-health-check",
+      "title": {
+        "id": "Cek Kesehatan API Harian",
+        "en": "Daily API Health Check"
+      },
+      "description": {
+        "id": "Cek endpoint API tiap hari dan kirim email kalau statusnya tidak OK.",
+        "en": "Ping an API endpoint daily and email the team when the status is not OK."
+      },
+      "tags": [
+        "schedule",
+        "http",
+        "email"
+      ],
+      "nodes": 4,
+      "token": "1reyJ2IjoxLCJ0cyI6MTc4MTI0MDAwMCwidyI6IntcIm5hbWVcIjpcIkRhaWx5IEFQSSBIZWFsdGggQ2hlY2tcIixcIm5vZGVzXCI6W3tcImlkXCI6XCJhMVwiLFwibmFtZVwiOlwiRXZlcnkgTW9ybmluZ1wiLFwidHlwZVwiOlwibjhuLW5vZGVzLWJhc2Uuc2NoZWR1bGVUcmlnZ2VyXCIsXCJ0eXBlVmVyc2lvblwiOjEuMixcInBvc2l0aW9uXCI6WzI0MCwzMDBdLFwicGFyYW1ldGVyc1wiOntcInJ1bGVcIjp7XCJpbnRlcnZhbFwiOlt7XCJmaWVsZFwiOlwiaG91cnNcIixcImhvdXJzSW50ZXJ2YWxcIjoyNH1dfX19LHtcImlkXCI6XCJiMlwiLFwibmFtZVwiOlwiQ2hlY2sgQVBJXCIsXCJ0eXBlXCI6XCJuOG4tbm9kZXMtYmFzZS5odHRwUmVxdWVzdFwiLFwidHlwZVZlcnNpb25cIjo0LjIsXCJwb3NpdGlvblwiOls0NjAsMzAwXSxcInBhcmFtZXRlcnNcIjp7XCJ1cmxcIjpcImh0dHBzOi8vYXBpLmV4YW1wbGUuY29tL2hlYWx0aFwiLFwibWV0aG9kXCI6XCJHRVRcIixcIm9wdGlvbnNcIjp7XCJ0aW1lb3V0XCI6MTAwMDB9fX0se1wiaWRcIjpcImMzXCIsXCJuYW1lXCI6XCJJcyBJdCBEb3duP1wiLFwidHlwZVwiOlwibjhuLW5vZGVzLWJhc2UuaWZcIixcInR5cGVWZXJzaW9uXCI6Mi4yLFwicG9zaXRpb25cIjpbNjgwLDMwMF0sXCJwYXJhbWV0ZXJzXCI6e1wiY29uZGl0aW9uc1wiOntcIm9wdGlvbnNcIjp7XCJjYXNlU2Vuc2l0aXZlXCI6dHJ1ZSxcInR5cGVWYWxpZGF0aW9uXCI6XCJzdHJpY3RcIn0sXCJjb21iaW5hdG9yXCI6XCJhbmRcIixcImNvbmRpdGlvbnNcIjpbe1wiaWRcIjpcImgxXCIsXCJsZWZ0VmFsdWVcIjpcIj17eyAkanNvbi5zdGF0dXMgfX1cIixcInJpZ2h0VmFsdWVcIjpcIm9rXCIsXCJvcGVyYXRvclwiOntcInR5cGVcIjpcInN0cmluZ1wiLFwib3BlcmF0aW9uXCI6XCJub3RFcXVhbHNcIn19XX19fSx7XCJpZFwiOlwiZDRcIixcIm5hbWVcIjpcIkFsZXJ0IGJ5IEVtYWlsXCIsXCJ0eXBlXCI6XCJuOG4tbm9kZXMtYmFzZS5lbWFpbFNlbmRcIixcInR5cGVWZXJzaW9uXCI6Mi4xLFwicG9zaXRpb25cIjpbOTAwLDIwMF0sXCJwYXJhbWV0ZXJzXCI6e1wiZnJvbUVtYWlsXCI6XCJhbGVydHNAZXhhbXBsZS5jb21cIixcInRvRW1haWxcIjpcIm9wc0BleGFtcGxlLmNvbVwiLFwic3ViamVjdFwiOlwiQVBJIGhlYWx0aCBjaGVjayBmYWlsZWRcIixcInRleHRcIjpcIj1UaGUgaGVhbHRoIGVuZHBvaW50IHJldHVybmVkOiB7eyAkanNvbi5zdGF0dXMgfX1cIn19XSxcImNvbm5lY3Rpb25zXCI6e1wiRXZlcnkgTW9ybmluZ1wiOntcIm1haW5cIjpbW3tcIm5vZGVcIjpcIkNoZWNrIEFQSVwiLFwidHlwZVwiOlwibWFpblwiLFwiaW5kZXhcIjowfV1dfSxcIkNoZWNrIEFQSVwiOntcIm1haW5cIjpbW3tcIm5vZGVcIjpcIklzIEl0IERvd24_XCIsXCJ0eXBlXCI6XCJtYWluXCIsXCJpbmRleFwiOjB9XV19LFwiSXMgSXQgRG93bj9cIjp7XCJtYWluXCI6W1t7XCJub2RlXCI6XCJBbGVydCBieSBFbWFpbFwiLFwidHlwZVwiOlwibWFpblwiLFwiaW5kZXhcIjowfV1dfX0sXCJhY3RpdmVcIjpmYWxzZSxcInNldHRpbmdzXCI6e319In0"
+    },
+    {
+      "id": "rss-telegram",
+      "title": {
+        "id": "Digest RSS ke Telegram",
+        "en": "RSS Digest to Telegram"
+      },
+      "description": {
+        "id": "Ambil item RSS terbaru tiap jam, rangkum dengan node Code, lalu kirim ke Telegram.",
+        "en": "Fetch the latest RSS items hourly, summarize them with a Code node, and send to Telegram."
+      },
+      "tags": [
+        "rss",
+        "code",
+        "telegram"
+      ],
+      "nodes": 4,
+      "token": "1reyJ2IjoxLCJ0cyI6MTc4MTI0MDAwMCwidyI6IntcIm5hbWVcIjpcIlJTUyBEaWdlc3QgdG8gVGVsZWdyYW1cIixcIm5vZGVzXCI6W3tcImlkXCI6XCJhMVwiLFwibmFtZVwiOlwiSG91cmx5XCIsXCJ0eXBlXCI6XCJuOG4tbm9kZXMtYmFzZS5zY2hlZHVsZVRyaWdnZXJcIixcInR5cGVWZXJzaW9uXCI6MS4yLFwicG9zaXRpb25cIjpbMjQwLDMwMF0sXCJwYXJhbWV0ZXJzXCI6e1wicnVsZVwiOntcImludGVydmFsXCI6W3tcImZpZWxkXCI6XCJob3Vyc1wiLFwiaG91cnNJbnRlcnZhbFwiOjF9XX19fSx7XCJpZFwiOlwiYjJcIixcIm5hbWVcIjpcIlJlYWQgRmVlZFwiLFwidHlwZVwiOlwibjhuLW5vZGVzLWJhc2UucnNzRmVlZFJlYWRcIixcInR5cGVWZXJzaW9uXCI6MS4xLFwicG9zaXRpb25cIjpbNDYwLDMwMF0sXCJwYXJhbWV0ZXJzXCI6e1widXJsXCI6XCJodHRwczovL2hucnNzLm9yZy9mcm9udHBhZ2VcIn19LHtcImlkXCI6XCJjM1wiLFwibmFtZVwiOlwiRm9ybWF0IERpZ2VzdFwiLFwidHlwZVwiOlwibjhuLW5vZGVzLWJhc2UuY29kZVwiLFwidHlwZVZlcnNpb25cIjoyLFwicG9zaXRpb25cIjpbNjgwLDMwMF0sXCJwYXJhbWV0ZXJzXCI6e1wianNDb2RlXCI6XCJjb25zdCBsaW5lcyA9IGl0ZW1zLnNsaWNlKDAsIDUpLm1hcCgoaXRlbSwgaSkgPT4gYCR7aSArIDF9LiAke2l0ZW0uanNvbi50aXRsZX1cXFxcbiR7aXRlbS5qc29uLmxpbmt9YClcXG5yZXR1cm4gW3sganNvbjogeyBkaWdlc3Q6IGxpbmVzLmpvaW4oJ1xcXFxuXFxcXG4nKSB9IH1dXCJ9fSx7XCJpZFwiOlwiZDRcIixcIm5hbWVcIjpcIlNlbmQgdG8gVGVsZWdyYW1cIixcInR5cGVcIjpcIm44bi1ub2Rlcy1iYXNlLnRlbGVncmFtXCIsXCJ0eXBlVmVyc2lvblwiOjEuMixcInBvc2l0aW9uXCI6WzkwMCwzMDBdLFwicGFyYW1ldGVyc1wiOntcInJlc291cmNlXCI6XCJtZXNzYWdlXCIsXCJvcGVyYXRpb25cIjpcInNlbmRNZXNzYWdlXCIsXCJjaGF0SWRcIjpcIkBteV9jaGFubmVsXCIsXCJ0ZXh0XCI6XCI9e3sgJGpzb24uZGlnZXN0IH19XCJ9fV0sXCJjb25uZWN0aW9uc1wiOntcIkhvdXJseVwiOntcIm1haW5cIjpbW3tcIm5vZGVcIjpcIlJlYWQgRmVlZFwiLFwidHlwZVwiOlwibWFpblwiLFwiaW5kZXhcIjowfV1dfSxcIlJlYWQgRmVlZFwiOntcIm1haW5cIjpbW3tcIm5vZGVcIjpcIkZvcm1hdCBEaWdlc3RcIixcInR5cGVcIjpcIm1haW5cIixcImluZGV4XCI6MH1dXX0sXCJGb3JtYXQgRGlnZXN0XCI6e1wibWFpblwiOltbe1wibm9kZVwiOlwiU2VuZCB0byBUZWxlZ3JhbVwiLFwidHlwZVwiOlwibWFpblwiLFwiaW5kZXhcIjowfV1dfX0sXCJhY3RpdmVcIjpmYWxzZSxcInNldHRpbmdzXCI6e319In0"
+    }
+  ]
+}

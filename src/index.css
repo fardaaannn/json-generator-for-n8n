@@ -609,3 +609,21 @@ textarea:focus-visible, select:focus-visible, input:focus-visible {
 .history-item-pin:hover { color: var(--text); background: var(--border); }
 .history-item-pin.active { color: var(--text); }
 .history-clear { align-self: flex-start; margin-top: 2px; }
+
+/* --- public workflow gallery --- */
+.gallery-state { font-size: 12px; color: var(--muted); padding: 6px 0; }
+.gallery-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+.gallery-item {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px;
+}
+.gallery-item-info { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.gallery-item-title { font-size: 13px; font-weight: 600; color: var(--text); }
+.gallery-item-desc { font-size: 12px; color: var(--muted); line-height: 1.45; }
+.gallery-item-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 3px; }
+.gallery-item-nodes { font-size: 11px; color: var(--muted); }
+.gallery-tag {
+  font-size: 10.5px; color: var(--muted); border: 1px solid var(--border);
+  border-radius: 999px; padding: 1px 8px;
+}
+.gallery-load-btn { flex-shrink: 0; }
