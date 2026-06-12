@@ -7,7 +7,7 @@ import { useWorkflowGeneration } from './lib/useWorkflowGeneration'
 import { useN8nImport } from './lib/useN8nImport'
 import { loadStoredKeys, persistKeys, keyForProvider, setKeyForProvider } from './lib/apiKeyStore'
 import { formatRelativeTime, formatAbsoluteTime } from './lib/timeFormat'
-import { encodeWorkflow, decodeWorkflow, buildShareUrl, readShareParam } from './lib/shareLink'
+import { encodeWorkflow, decodeShare, buildShareUrl, readShareParam } from './lib/shareLink'
 import Header from './components/Header'
 import Hero from './components/Hero'
 import References from './components/References'
@@ -345,14 +345,20 @@ export default function App() {
     const token = readShareParam()
     if (!token) return
     let cancelled = false
-    decodeWorkflow(token).then((json) => {
-      if (cancelled || !json) return
+    decodeShare(token).then(({ json, error }) => {
+      if (cancelled) return
+      if (!json) {
+        // Tell the user why the link didn't load instead of failing silently:
+        // a link from a newer app version gets its own explanation.
+        setErrorMsg(t(error === 'unsupported-version' ? 'errShareVersion' : 'errShareCorrupt'))
+        return
+      }
       if (loadWorkflow(json)) {
         try { window.history.replaceState(null, '', window.location.pathname + window.location.search) } catch (e) { /* ignore */ }
       }
     })
     return () => { cancelled = true }
-  }, [loadWorkflow])
+  }, [loadWorkflow, setErrorMsg, t])
 
   const providerConfig = PROVIDERS[provider]
   const modelOptions = models

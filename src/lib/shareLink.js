@@ -14,6 +14,17 @@ const HASH_PREFIX = 'w='; // location.hash looks like "#w=<token>"
 const CODEC_GZIP = 'g';
 const CODEC_RAW = 'r';
 
+// --- token format versioning -----------------------------------------------
+// Legacy tokens (no version): "<codec><base64url(workflow json)>".
+// v1+ tokens: "<version digit(s)><codec><base64url(envelope json)>", where the
+// envelope is { v, ts, w } and `w` is the original workflow JSON string. The
+// envelope gives future format changes a place to live; the contract is that
+// any future version keeps `w`, so older apps can still extract the workflow
+// from newer links (forward compatibility), and decode() reports an
+// unsupported version distinctly so the UI can explain instead of failing
+// silently. Codec chars are non-digits, so the two formats never collide.
+const FORMAT_VERSION = 1;
+
 // --- base64url helpers (no '+', '/', '=' so the token is URL/hash safe) ---
 
 function bytesToBase64Url(bytes) {
@@ -55,16 +66,21 @@ async function gunzipBytes(bytes) {
  */
 export async function encodeWorkflow(jsonString) {
   if (typeof jsonString !== 'string' || !jsonString) return '';
-  const utf8 = new TextEncoder().encode(jsonString);
+  const envelope = JSON.stringify({
+    v: FORMAT_VERSION,
+    ts: Math.floor(Date.now() / 1000),
+    w: jsonString,
+  });
+  const utf8 = new TextEncoder().encode(envelope);
   if (hasCompressionStream) {
     try {
       const gz = await gzipBytes(utf8);
-      return CODEC_GZIP + bytesToBase64Url(gz);
+      return String(FORMAT_VERSION) + CODEC_GZIP + bytesToBase64Url(gz);
     } catch (e) {
       // Fall through to the raw path if compression unexpectedly fails.
     }
   }
-  return CODEC_RAW + bytesToBase64Url(utf8);
+  return String(FORMAT_VERSION) + CODEC_RAW + bytesToBase64Url(utf8);
 }
 
 /**
@@ -75,9 +91,60 @@ export async function encodeWorkflow(jsonString) {
  * @returns {Promise<string|null>}
  */
 export async function decodeWorkflow(token) {
-  if (typeof token !== 'string' || token.length < 2) return null;
-  const codec = token[0];
-  const payload = token.slice(1);
+  const res = await decodeShare(token);
+  return res.json;
+}
+
+/**
+ * Version-aware decode with a structured result, so callers can tell a link
+ * made by a newer app version apart from a corrupt one:
+ *   { json: string|null, version: number, error: null|'unsupported-version'|'corrupt' }
+ * Never throws.
+ * @param {string} token
+ */
+export async function decodeShare(token) {
+  if (typeof token !== 'string' || token.length < 2) {
+    return { json: null, version: 0, error: 'corrupt' };
+  }
+
+  // Split off a leading version number (digits). Legacy tokens start straight
+  // at the codec char, which is never a digit.
+  const m = /^(\d+)/.exec(token);
+  const version = m ? parseInt(m[1], 10) : 0;
+  const rest = m ? token.slice(m[1].length) : token;
+
+  const text = await decodePayload(rest);
+  if (text === null) return { json: null, version, error: 'corrupt' };
+
+  // Legacy: the payload IS the workflow JSON string.
+  if (version === 0) return { json: text, version, error: null };
+
+  // Versioned: the payload is an envelope; `w` carries the workflow JSON
+  // string in every version (the forward-compat contract).
+  try {
+    const envelope = JSON.parse(text);
+    const w = envelope && envelope.w;
+    const json = typeof w === 'string' ? w : (w && typeof w === 'object' ? JSON.stringify(w) : null);
+    if (json) return { json, version, error: null };
+    return {
+      json: null,
+      version,
+      error: version > FORMAT_VERSION ? 'unsupported-version' : 'corrupt',
+    };
+  } catch (e) {
+    return {
+      json: null,
+      version,
+      error: version > FORMAT_VERSION ? 'unsupported-version' : 'corrupt',
+    };
+  }
+}
+
+// Reverse the codec layer: "<codec char><base64url>" -> decoded text, or null.
+async function decodePayload(rest) {
+  if (typeof rest !== 'string' || rest.length < 2) return null;
+  const codec = rest[0];
+  const payload = rest.slice(1);
   try {
     const bytes = base64UrlToBytes(payload);
     if (codec === CODEC_GZIP) {
