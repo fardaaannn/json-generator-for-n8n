@@ -1,5 +1,6 @@
 import { isLikelyUnknownNodeType } from './n8nNodes.js';
 import { computeLayout } from './workflowLayout.js';
+import { interpolate } from './i18nData.js';
 
 // Client-side request timeout. Generous on purpose: reasoning models (and big
 // workflows) can legitimately take well over a minute, so a too-tight limit
@@ -7,11 +8,10 @@ import { computeLayout } from './workflowLayout.js';
 // it via sendRequest(..., { timeout }).
 const REQUEST_TIMEOUT_MS = 120000;
 
-const fallbackT = (key, params) => {
-  let str = key;
-  if (params) for (const p in params) str = str.replace(new RegExp('\\{' + p + '\\}', 'g'), String(params[p]));
-  return str;
-};
+// Identity translator used when no UI translator is supplied (tests, scripts):
+// returns the key itself with {param} placeholders interpolated. The
+// interpolation logic is shared with makeT (i18nData.js) so they can't drift.
+const fallbackT = (key, params) => interpolate(key, params);
 
 /**
  * Validate a user-supplied base URL and return its normalized origin+path.
@@ -23,6 +23,13 @@ const fallbackT = (key, params) => {
  * non-network scheme (javascript:, data:, file:, blob:, ...) if a malformed or
  * malicious value ever reaches the request layer, and gives the user a clear
  * error instead of an opaque "failed to fetch".
+ *
+ * Additionally, plain http: is only accepted for hosts where the traffic never
+ * leaves the machine or the local network (localhost, loopback, RFC-1918
+ * ranges, .local-style suffixes, bare intranet hostnames). For a public host,
+ * an http: URL would either send the API key unencrypted (dev) or be blocked
+ * by mixed-content/CSP with a misleading network error (deployed https build),
+ * so we reject it up front with a specific message.
  *
  * @param {string} url   raw user input
  * @param {string} errKey i18n key to throw with when invalid
@@ -38,7 +45,30 @@ export function assertHttpUrl(url, errKey = 'errBaseUrlInvalid', t = fallbackT) 
   if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') {
     throw new Error(t(errKey));
   }
+  if (parsed.protocol === 'http:' && !isLocalHttpHost(parsed.hostname)) {
+    throw new Error(t('errHttpRemote'));
+  }
   return parsed;
+}
+
+/**
+ * Is this a hostname where plain http is acceptable (loopback, private LAN
+ * ranges, mDNS/intranet-style names)? Used by assertHttpUrl. Note `hostname`
+ * comes from the URL parser, so an IPv6 loopback appears as "[::1]".
+ */
+export function isLocalHttpHost(hostname) {
+  const h = String(hostname || '').toLowerCase();
+  if (!h) return false;
+  if (h === 'localhost' || h === '[::1]' || h === '::1' || h === '0.0.0.0') return true;
+  if (/^127(\.\d{1,3}){3}$/.test(h)) return true;          // loopback
+  if (/^10(\.\d{1,3}){3}$/.test(h)) return true;           // RFC-1918 10/8
+  if (/^192\.168(\.\d{1,3}){2}$/.test(h)) return true;     // RFC-1918 192.168/16
+  if (/^172\.(1[6-9]|2\d|3[01])(\.\d{1,3}){2}$/.test(h)) return true; // RFC-1918 172.16/12
+  if (/\.(local|localhost|internal|lan|home|localdomain)$/.test(h)) return true;
+  // A bare single-label hostname (e.g. "n8n", "nas") can only resolve on a
+  // local network, so http is fine there too.
+  if (!h.includes('.') && !h.includes(':')) return true;
+  return false;
 }
 
 /**
@@ -98,7 +128,13 @@ const COMPLEXITY_DESC = {
 // buildRequest as `max_tokens`. The "complex" budget is intentionally very high
 // so large workflows aren't cut off; note some providers/models cap max_tokens
 // to their own output limit and will clamp (or reject) a value above it.
-const TOKEN_BUDGET = { simple: 4000, medium: 8000, complex: 100000 };
+// Output-token budget per complexity level. `complex` is deliberately capped
+// at 32k: most mainstream models reject a larger max_tokens outright (gpt-4o
+// allows at most 16,384 completion tokens, many Groq-hosted models 8–32k), so
+// asking for more turns "Complete + error handling" into a confusing provider
+// 400 instead of a bigger workflow. When even 32k exceeds a model's limit the
+// caller retries with the default budget (see isMaxTokensError).
+const TOKEN_BUDGET = { simple: 4000, medium: 8000, complex: 32000 };
 
 export function maxTokensFor(complexity) {
   return TOKEN_BUDGET[complexity] || TOKEN_BUDGET.medium;
@@ -348,10 +384,14 @@ export function repairJSON(raw, t = fallbackT) {
     const lastBrace = raw.lastIndexOf('}');
     if (lastBrace > 0) {
       let fixed = raw.substring(0, lastBrace + 1);
-      const opens = (fixed.match(/\[/g) || []).length - (fixed.match(/\]/g) || []).length;
-      const openBraces = (fixed.match(/\{/g) || []).length - (fixed.match(/\}/g) || []).length;
-      for (let i = 0; i < opens; i++) fixed += ']';
-      for (let i = 0; i < openBraces; i++) fixed += '}';
+      // Close whatever is still open, innermost first. openBracketStack
+      // ignores brackets inside string literals — a generated workflow very
+      // often contains braces in string values (e.g. a Code node's jsCode), so
+      // a naive regex count would append the wrong closers.
+      const stack = openBracketStack(fixed);
+      for (let i = stack.length - 1; i >= 0; i--) {
+        fixed += stack[i] === '{' ? '}' : ']';
+      }
       try {
         return { value: JSON.parse(fixed), repaired: true };
       } catch (e2) {
@@ -360,6 +400,30 @@ export function repairJSON(raw, t = fallbackT) {
     }
     throw new Error(t('errJsonInvalid'));
   }
+}
+
+// Scan a JSON prefix and return the stack of brackets ('{' / '[') that are
+// still open at the end, skipping anything inside string literals (with
+// backslash-escape handling). Assumes the prefix is otherwise well-formed —
+// if it isn't, the subsequent JSON.parse fails and the caller reports an
+// invalid-JSON error exactly as before.
+function openBracketStack(text) {
+  const stack = [];
+  let inString = false;
+  let escaped = false;
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (escaped) { escaped = false; continue; }
+    if (inString) {
+      if (ch === '\\') escaped = true;
+      else if (ch === '"') inString = false;
+      continue;
+    }
+    if (ch === '"') inString = true;
+    else if (ch === '{' || ch === '[') stack.push(ch);
+    else if (ch === '}' || ch === ']') stack.pop();
+  }
+  return stack;
 }
 
 /**
@@ -374,7 +438,40 @@ export function isResponseFormatError(err) {
   return /response_format|json[_ ]?object|json mode|json schema|structured outputs?/i.test(msg);
 }
 
+/**
+ * Does this error look like the provider rejecting the requested max_tokens as
+ * larger than what the model can produce? The wording differs per provider —
+ * OpenAI: "max_tokens is too large: … supports at most 16384 completion
+ * tokens"; Anthropic: "max_tokens: 100000 > 64000, which is the maximum
+ * allowed…"; Groq: "max_tokens must be less than or equal to …" — so we match
+ * the parameter name plus limit-style language. Callers use this to retry once
+ * with a smaller output budget instead of surfacing a cryptic 400.
+ */
+export function isMaxTokensError(err) {
+  const msg = (err && err.message) ? String(err.message) : String(err);
+  if (!/max_?(completion_)?tokens|output tokens|output limit/i.test(msg)) return false;
+  return /too large|less than|at most|maximum|exceed|greater than|upper bound|limit|invalid|>/i.test(msg);
+}
+
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+// Error thrown when the USER aborted the request (vs. a timeout abort).
+// Tagged so callers can skip fallbacks/retries and reset the UI quietly.
+function cancelledError(t) {
+  const e = new Error(t('errCancelled'));
+  e.isCancelled = true;
+  return e;
+}
+
+// Forward an external user-cancel signal onto a per-request controller (which
+// also handles the timeout). Returns an unsubscribe function; always call it
+// once the request settles so listeners don't pile up on a reused signal.
+function linkAbortSignal(signal, controller) {
+  if (!signal) return () => {};
+  const onAbort = () => controller.abort();
+  signal.addEventListener('abort', onAbort, { once: true });
+  return () => signal.removeEventListener('abort', onAbort);
+}
 
 // Exponential backoff with a little jitter so retries from many clients don't
 // line up. attempt is 0-based.
@@ -403,10 +500,12 @@ function parseRetryAfter(value) {
  * timeout/abort is NOT retried (it already waited the full window), and 4xx
  * other than 429 fail fast (retrying a bad request won't help).
  */
-export async function sendRequest(req, t = fallbackT, { timeout = REQUEST_TIMEOUT_MS, retries = 2, retryBaseMs = 600 } = {}) {
+export async function sendRequest(req, t = fallbackT, { timeout = REQUEST_TIMEOUT_MS, retries = 2, retryBaseMs = 600, signal } = {}) {
   // attempt 0 is the first try; each retry increments it, bounded by `retries`.
   for (let attempt = 0; attempt <= retries; attempt++) {
+    if (signal && signal.aborted) throw cancelledError(t);
     const controller = new AbortController();
+    const unlink = linkAbortSignal(signal, controller);
     const timer = setTimeout(() => controller.abort(), timeout);
     let res;
     try {
@@ -418,7 +517,10 @@ export async function sendRequest(req, t = fallbackT, { timeout = REQUEST_TIMEOU
       });
     } catch (err) {
       clearTimeout(timer);
+      unlink();
       if (err && err.name === 'AbortError') {
+        // The abort either came from the user (cancel) or from the timeout.
+        if (signal && signal.aborted) throw cancelledError(t);
         throw new Error(t('errTimeout', { s: Math.round(timeout / 1000) }));
       }
       // Network glitch — retry a few times before surfacing the error.
@@ -429,6 +531,7 @@ export async function sendRequest(req, t = fallbackT, { timeout = REQUEST_TIMEOU
       throw new Error(t('errNetwork', { msg: err.message || String(err) }));
     }
     clearTimeout(timer);
+    unlink();
 
     if (!res.ok) {
       // Rate-limited or server-side error → wait and retry while attempts remain.
@@ -465,8 +568,10 @@ export async function sendRequest(req, t = fallbackT, { timeout = REQUEST_TIMEOU
  * timeout is tagged (`err.isTimeout`) so the caller can avoid a second long
  * wait. This function does NOT retry; retries live in the fallback path.
  */
-export async function sendRequestStream(req, t = fallbackT, { onToken, timeout = REQUEST_TIMEOUT_MS } = {}, streamExtract) {
+export async function sendRequestStream(req, t = fallbackT, { onToken, timeout = REQUEST_TIMEOUT_MS, signal } = {}, streamExtract) {
+  if (signal && signal.aborted) throw cancelledError(t);
   const controller = new AbortController();
+  const unlink = linkAbortSignal(signal, controller);
   const timer = setTimeout(() => controller.abort(), timeout);
 
   let res;
@@ -474,7 +579,9 @@ export async function sendRequestStream(req, t = fallbackT, { onToken, timeout =
     res = await fetch(req.url, { method: 'POST', headers: req.headers, body: req.body, signal: controller.signal });
   } catch (err) {
     clearTimeout(timer);
+    unlink();
     if (err && err.name === 'AbortError') {
+      if (signal && signal.aborted) throw cancelledError(t);
       const e = new Error(t('errTimeout', { s: Math.round(timeout / 1000) }));
       e.isTimeout = true;
       throw e;
@@ -484,6 +591,7 @@ export async function sendRequestStream(req, t = fallbackT, { onToken, timeout =
 
   if (!res.ok) {
     clearTimeout(timer);
+    unlink();
     let errMsg = 'HTTP ' + res.status;
     try {
       const errData = await res.json();
@@ -498,6 +606,7 @@ export async function sendRequestStream(req, t = fallbackT, { onToken, timeout =
   // the caller fall back to the non-streaming path.
   if (!res.body || typeof res.body.getReader !== 'function') {
     clearTimeout(timer);
+    unlink();
     throw new Error('streaming not supported');
   }
 
@@ -533,6 +642,7 @@ export async function sendRequestStream(req, t = fallbackT, { onToken, timeout =
     }
   } catch (err) {
     if (err && err.name === 'AbortError') {
+      if (signal && signal.aborted) throw cancelledError(t);
       const e = new Error(t('errTimeout', { s: Math.round(timeout / 1000) }));
       e.isTimeout = true;
       throw e;
@@ -540,6 +650,7 @@ export async function sendRequestStream(req, t = fallbackT, { onToken, timeout =
     throw new Error(t('errNetwork', { msg: err.message || String(err) }));
   } finally {
     clearTimeout(timer);
+    unlink();
     try { reader.releaseLock(); } catch (e) { /* ignore */ }
   }
 

@@ -56,6 +56,33 @@ describe('diffWorkflows', () => {
     expect(diff.modifiedNodes).toEqual([])
   })
 
+  it('reports a connection-type change as removed + added', () => {
+    // Same two nodes, but the edge moves from `main` to `ai_languageModel` —
+    // previously invisible because the key ignored the output name.
+    const after = JSON.parse(JSON.stringify(baseWorkflow))
+    after.connections.Webhook = { ai_languageModel: [[{ node: 'Filter', type: 'ai_languageModel', index: 0 }]] }
+    const diff = diffWorkflows(baseWorkflow, after)
+    expect(diff.hasChanges).toBe(true)
+    expect(diff.addedConnections).toEqual([{ from: 'Webhook', to: 'Filter' }])
+    expect(diff.removedConnections).toEqual([{ from: 'Webhook', to: 'Filter' }])
+  })
+
+  it('does not confuse edges whose names concatenate identically', () => {
+    const wf = (conns) => ({
+      name: 'WF',
+      nodes: [
+        { name: 'Send', type: 't' }, { name: 'Email1', type: 't' },
+        { name: 'SendEmail', type: 't' }, { name: '1', type: 't' },
+      ],
+      connections: conns,
+    })
+    const before = wf({ Send: { main: [[{ node: 'Email1', type: 'main', index: 0 }]] } })
+    const after = wf({ SendEmail: { main: [[{ node: '1', type: 'main', index: 0 }]] } })
+    const diff = diffWorkflows(before, after)
+    expect(diff.addedConnections).toEqual([{ from: 'SendEmail', to: '1' }])
+    expect(diff.removedConnections).toEqual([{ from: 'Send', to: 'Email1' }])
+  })
+
   it('is robust to missing/empty inputs', () => {
     expect(diffWorkflows(null, null).hasChanges).toBe(false)
     const diff = diffWorkflows(undefined, baseWorkflow)

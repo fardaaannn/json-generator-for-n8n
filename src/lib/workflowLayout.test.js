@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { computeLayout, nodeAriaLabel, summaryAriaLabel } from './workflowLayout.js'
-import { makeT } from './i18n.jsx'
+import { makeT } from './i18nData.js'
 
 const t = makeT('en')
 

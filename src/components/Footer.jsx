@@ -1,4 +1,4 @@
-import { useLanguage } from '../lib/i18n'
+import { useLanguage } from '../lib/useLanguage'
 
 const REPO_URL = 'https://github.com/fardaaannn/json-generator-for-n8n'
 

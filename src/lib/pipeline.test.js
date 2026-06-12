@@ -9,6 +9,9 @@ import {
   normalizeConnections,
   validateStructure,
   maxTokensFor,
+  assertHttpUrl,
+  isLocalHttpHost,
+  isMaxTokensError,
   EXAMPLE_JSON,
 } from './pipeline.js'
 
@@ -98,7 +101,7 @@ describe('maxTokensFor', () => {
   it('grows the token budget with complexity', () => {
     expect(maxTokensFor('simple')).toBe(4000)
     expect(maxTokensFor('medium')).toBe(8000)
-    expect(maxTokensFor('complex')).toBe(100000)
+    expect(maxTokensFor('complex')).toBe(32000)
   })
 
   it('falls back to the medium budget for unknown complexity', () => {
@@ -214,6 +217,88 @@ describe('repairJSON', () => {
 
   it('throws when the content cannot be repaired into valid JSON', () => {
     expect(() => repairJSON('{"a": }')).toThrow('errJsonInvalid')
+  })
+
+  it('ignores brackets inside string values when balancing', () => {
+    // A Code node's jsCode commonly contains braces; a naive bracket count
+    // would append the wrong number of closers here.
+    const truncated = '{"name":"wf","nodes":[{"id":"1","parameters":{"jsCode":"if (x) { return [1,2]; }"}}'
+    const { value, repaired } = repairJSON(truncated)
+    expect(repaired).toBe(true)
+    expect(value.nodes).toHaveLength(1)
+    expect(value.nodes[0].parameters.jsCode).toBe('if (x) { return [1,2]; }')
+  })
+
+  it('ignores escaped quotes inside strings when balancing', () => {
+    const truncated = '{"name":"a \\"quoted\\" {value}","nodes":[{"id":"1"}'
+    const { value, repaired } = repairJSON(truncated)
+    expect(repaired).toBe(true)
+    expect(value.nodes[0].id).toBe('1')
+  })
+
+  it('closes brackets in the right (innermost-first) order', () => {
+    const truncated = '{"a":{"b":[{"c":1}'
+    const { value, repaired } = repairJSON(truncated)
+    expect(repaired).toBe(true)
+    expect(value).toEqual({ a: { b: [{ c: 1 }] } })
+  })
+})
+
+describe('assertHttpUrl', () => {
+  it('accepts https URLs for any host', () => {
+    expect(assertHttpUrl('https://api.example.com/v1').hostname).toBe('api.example.com')
+  })
+
+  it('accepts http URLs for local and private hosts', () => {
+    expect(assertHttpUrl('http://localhost:5678').hostname).toBe('localhost')
+    expect(assertHttpUrl('http://127.0.0.1:5678').hostname).toBe('127.0.0.1')
+    expect(assertHttpUrl('http://192.168.1.10:5678').hostname).toBe('192.168.1.10')
+    expect(assertHttpUrl('http://10.0.0.5').hostname).toBe('10.0.0.5')
+    expect(assertHttpUrl('http://172.16.0.1').hostname).toBe('172.16.0.1')
+    expect(assertHttpUrl('http://n8n.local').hostname).toBe('n8n.local')
+    expect(assertHttpUrl('http://[::1]:5678').hostname).toBe('[::1]')
+    // bare intranet hostname
+    expect(assertHttpUrl('http://nas:5678').hostname).toBe('nas')
+  })
+
+  it('rejects http URLs for public hosts (API key would travel unencrypted)', () => {
+    expect(() => assertHttpUrl('http://api.example.com')).toThrow('errHttpRemote')
+    expect(() => assertHttpUrl('http://172.32.0.1')).toThrow('errHttpRemote') // outside 172.16/12
+  })
+
+  it('rejects non-http(s) schemes and unparseable input', () => {
+    expect(() => assertHttpUrl('javascript:alert(1)')).toThrow('errBaseUrlInvalid')
+    expect(() => assertHttpUrl('file:///etc/passwd')).toThrow('errBaseUrlInvalid')
+    expect(() => assertHttpUrl('not a url')).toThrow('errBaseUrlInvalid')
+  })
+})
+
+describe('isLocalHttpHost', () => {
+  it('classifies hosts correctly', () => {
+    expect(isLocalHttpHost('localhost')).toBe(true)
+    expect(isLocalHttpHost('127.0.0.1')).toBe(true)
+    expect(isLocalHttpHost('[::1]')).toBe(true)
+    expect(isLocalHttpHost('192.168.0.2')).toBe(true)
+    expect(isLocalHttpHost('example.com')).toBe(false)
+    expect(isLocalHttpHost('8.8.8.8')).toBe(false)
+    expect(isLocalHttpHost('')).toBe(false)
+  })
+})
+
+describe('isMaxTokensError', () => {
+  it('matches provider wordings for an over-limit max_tokens', () => {
+    // OpenAI
+    expect(isMaxTokensError(new Error('max_tokens is too large: 100000. This model supports at most 16384 completion tokens. (400)'))).toBe(true)
+    // Anthropic
+    expect(isMaxTokensError(new Error('max_tokens: 100000 > 64000, which is the maximum allowed number of output tokens for this model (400)'))).toBe(true)
+    // Groq-style
+    expect(isMaxTokensError(new Error('max_tokens must be less than or equal to 32768 (400)'))).toBe(true)
+  })
+
+  it('does not match unrelated errors', () => {
+    expect(isMaxTokensError(new Error('Invalid API key (401)'))).toBe(false)
+    expect(isMaxTokensError(new Error('rate limit exceeded, tokens per minute (429)'))).toBe(false)
+    expect(isMaxTokensError(new Error('errTimeout'))).toBe(false)
   })
 })
 

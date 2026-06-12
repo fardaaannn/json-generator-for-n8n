@@ -1,4 +1,4 @@
-import { useLanguage } from '../lib/i18n'
+import { useLanguage } from '../lib/useLanguage'
 import { useTheme } from '../lib/useTheme'
 
 export default function Header() {

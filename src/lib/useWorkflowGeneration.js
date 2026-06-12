@@ -1,5 +1,5 @@
-import { useState, useEffect, useCallback } from 'react'
-import { PROVIDERS } from './providers'
+import { useState, useEffect, useCallback, useRef } from 'react'
+import { PROVIDERS, DEFAULT_MAX_TOKENS } from './providers'
 import {
   sanitizeInput,
   buildPrompt,
@@ -14,6 +14,7 @@ import {
   sendRequest,
   sendRequestStream,
   isResponseFormatError,
+  isMaxTokensError,
   assertHttpUrl,
   SYSTEM_PROMPT,
 } from './pipeline'
@@ -41,6 +42,22 @@ function applyHistoryPolicy(list) {
   const pinned = arr.filter((e) => e && e.pinned).sort((a, b) => (b.ts || 0) - (a.ts || 0))
   const unpinned = arr.filter((e) => !e || !e.pinned).sort((a, b) => (b.ts || 0) - (a.ts || 0))
   return [...pinned, ...unpinned.slice(0, HISTORY_LIMIT)]
+}
+
+// Persist the history list. localStorage writes can fail (quota, privacy
+// mode); instead of silently giving up — which used to make history stop
+// persisting without any signal — retry once with only the pinned entries
+// plus the newest few unpinned ones, so persistence degrades gracefully.
+function persistHistory(list) {
+  try {
+    localStorage.setItem(HISTORY_KEY, JSON.stringify(list))
+  } catch (e) {
+    try {
+      const pinned = list.filter((x) => x && x.pinned)
+      const unpinned = list.filter((x) => x && !x.pinned)
+      localStorage.setItem(HISTORY_KEY, JSON.stringify([...pinned, ...unpinned.slice(0, 3)]))
+    } catch (e2) { /* storage unavailable or still full — keep in-memory only */ }
+  }
 }
 
 /**
@@ -75,6 +92,13 @@ export function useWorkflowGeneration({ t, onRunStart }) {
   // Summary of what changed in the most recent refine (null until a refine
   // runs, or after it's dismissed / a fresh generation starts).
   const [lastDiff, setLastDiff] = useState(null)
+  // Controller for the in-flight generate/refine, so the user can cancel a
+  // request instead of waiting out the full timeout. Null when idle.
+  const abortRef = useRef(null)
+
+  const cancel = useCallback(() => {
+    if (abortRef.current) abortRef.current.abort()
+  }, [])
 
   // Restore the recent-generation history on mount.
   useEffect(() => {
@@ -98,7 +122,7 @@ export function useWorkflowGeneration({ t, onRunStart }) {
     }
     setHistory((prev) => {
       const next = applyHistoryPolicy([entry, ...prev])
-      try { localStorage.setItem(HISTORY_KEY, JSON.stringify(next)) } catch (e) { /* quota */ }
+      persistHistory(next)
       return next
     })
   }, [])
@@ -115,7 +139,7 @@ export function useWorkflowGeneration({ t, onRunStart }) {
       if (!target.pinned && prev.length >= HISTORY_MAX) { ok = false; return prev }
       const updated = prev.map((e) => (e.id === id ? { ...e, pinned: !e.pinned } : e))
       const next = applyHistoryPolicy(updated)
-      try { localStorage.setItem(HISTORY_KEY, JSON.stringify(next)) } catch (e) { /* quota */ }
+      persistHistory(next)
       return next
     })
     return ok
@@ -177,6 +201,12 @@ export function useWorkflowGeneration({ t, onRunStart }) {
     const maxTokens = config.maxTokens || maxTokensFor(config.complexity)
     const autoFix = config.autoFix !== false
 
+    // One controller covers the whole run (first call, fallback, self-heal):
+    // a single Cancel press aborts whichever request is in flight.
+    const controller = new AbortController()
+    abortRef.current = controller
+    const signal = controller.signal
+
     setBusy(true)
     setErrorMsg('')
     setWarnings([])
@@ -186,22 +216,30 @@ export function useWorkflowGeneration({ t, onRunStart }) {
     if (onRunStart) onRunStart()
     setStatus({ state: 'active', key: 'statusGenerating', params: {} })
 
-    const buildReq = (modelPrompt, opts) =>
-      cfg.buildRequest(effectiveModel, modelPrompt, config.apiKey, baseUrlValue, SYSTEM_PROMPT, maxTokens, opts)
+    const buildReq = (modelPrompt, opts, budget = maxTokens) =>
+      cfg.buildRequest(effectiveModel, modelPrompt, config.apiKey, baseUrlValue, SYSTEM_PROMPT, budget, opts)
 
-    // Plain (non-streaming) call, transparently retrying without response_format
-    // if the model/provider rejects JSON mode (common on some OpenRouter
-    // models). Used directly for self-heal and as the streaming fallback.
+    // Plain (non-streaming) call, transparently retrying on two well-known
+    // provider rejections: (a) response_format/JSON mode unsupported (common on
+    // some OpenRouter models) — retry without it; (b) the requested max_tokens
+    // exceeds the model's output limit (e.g. gpt-4o caps at 16k, so the
+    // "complex" budget can overshoot) — retry once with the default budget.
+    // Each retry can fire at most once, so this always terminates. Used
+    // directly for self-heal and as the streaming fallback.
     const callModelText = async (modelPrompt) => {
-      try {
-        const data = await sendRequest(buildReq(modelPrompt), t)
-        return cfg.extract(data)
-      } catch (e) {
-        if (isResponseFormatError(e)) {
-          const data = await sendRequest(buildReq(modelPrompt, { responseFormat: false }), t)
+      let responseFormat = true
+      let budget = maxTokens
+      for (;;) {
+        try {
+          const opts = responseFormat ? undefined : { responseFormat: false }
+          const data = await sendRequest(buildReq(modelPrompt, opts, budget), t, { signal })
           return cfg.extract(data)
+        } catch (e) {
+          if (e && e.isCancelled) throw e
+          if (responseFormat && isResponseFormatError(e)) { responseFormat = false; continue }
+          if (budget > DEFAULT_MAX_TOKENS && isMaxTokensError(e)) { budget = DEFAULT_MAX_TOKENS; continue }
+          throw e
         }
-        throw e
       }
     }
 
@@ -219,6 +257,7 @@ export function useWorkflowGeneration({ t, onRunStart }) {
           buildReq(modelPrompt, { stream: true }),
           t,
           {
+            signal,
             onToken: (full) => {
               // Throttle UI updates so a long stream doesn't thrash React.
               const now = Date.now()
@@ -231,8 +270,9 @@ export function useWorkflowGeneration({ t, onRunStart }) {
         // Empty stream (provider ignored it / sent no content) — fall back.
         return await callModelText(modelPrompt)
       } catch (e) {
-        // A real timeout already waited the full window; don't wait again.
-        if (e && e.isTimeout) throw e
+        // A real timeout already waited the full window (don't wait again),
+        // and a user cancel must not silently restart the request.
+        if (e && (e.isTimeout || e.isCancelled)) throw e
         return await callModelText(modelPrompt)
       }
     }
@@ -280,10 +320,16 @@ export function useWorkflowGeneration({ t, onRunStart }) {
       applyResult(parsed, pretty, repaired)
       if (onSuccess) onSuccess(parsed)
     } catch (e) {
-      setErrorMsg(t('errGenerateFailed', { msg: e.message }))
-      setStatus({ state: 'error', key: 'statusError', params: {} })
+      if (e && e.isCancelled) {
+        // User-initiated cancel: reset quietly instead of showing an error.
+        setStatus({ state: '', key: 'statusCancelled', params: {} })
+      } else {
+        setErrorMsg(t('errGenerateFailed', { msg: e.message }))
+        setStatus({ state: 'error', key: 'statusError', params: {} })
+      }
       setStreamingText('')
     } finally {
+      abortRef.current = null
       setBusy(false)
     }
   }, [t, onRunStart, applyResult])
@@ -419,6 +465,7 @@ export function useWorkflowGeneration({ t, onRunStart }) {
     lastDiff, setLastDiff,
     generate,
     refine,
+    cancel,
     loadWorkflow,
     restoreHistory,
     clearHistory,

@@ -1,4 +1,4 @@
-import { useLanguage } from '../lib/i18n'
+import { useLanguage } from '../lib/useLanguage'
 
 export default function Hero() {
   const { t } = useLanguage()

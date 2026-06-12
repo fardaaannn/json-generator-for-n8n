@@ -11,12 +11,18 @@ import { SYSTEM_PROMPT } from '../src/lib/pipeline.js';
 
 const PROMPT = 'Reply with exactly one word: OK';
 
-// model termurah/teraman per provider untuk dites
+// Model termurah/teraman per provider untuk dites. Ditulis eksplisit (bukan
+// indeks seperti models[2]) supaya tidak berubah diam-diam kalau urutan daftar
+// di providers.js diubah; pickModel memastikan id-nya masih ada di daftar.
+function pickModel(providerId, preferred) {
+  const list = PROVIDERS[providerId].models;
+  return list.includes(preferred) ? preferred : list[0];
+}
 const TEST = [
-  { id: 'anthropic', model: PROVIDERS.anthropic.models[2], key: process.env.ANTHROPIC_API_KEY },
+  { id: 'anthropic', model: pickModel('anthropic', 'claude-haiku-4-5-20251001'), key: process.env.ANTHROPIC_API_KEY },
   { id: 'openai', model: 'gpt-4o-mini', key: process.env.OPENAI_API_KEY },
-  { id: 'groq', model: PROVIDERS.groq.models[1], key: process.env.GROQ_API_KEY },
-  { id: 'openrouter', model: PROVIDERS.openrouter.models[2], key: process.env.OPENROUTER_API_KEY },
+  { id: 'groq', model: pickModel('groq', 'llama-3.1-8b-instant'), key: process.env.GROQ_API_KEY },
+  { id: 'openrouter', model: pickModel('openrouter', 'google/gemini-2.5-flash'), key: process.env.OPENROUTER_API_KEY },
   { id: 'custom', model: process.env.CUSTOM_MODEL || 'gpt-4o-mini', key: process.env.CUSTOM_API_KEY, base: process.env.CUSTOM_BASE_URL },
 ];
 
