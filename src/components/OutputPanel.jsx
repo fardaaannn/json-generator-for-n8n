@@ -3,7 +3,7 @@ import WorkflowPreview from './WorkflowPreview'
 // Output card top half: copy/share/download actions, filename + JSON/preview
 // view toggle, the output itself (code, live stream, or placeholder), and the
 // status bar. All state lives in App; this is presentational.
-export default function OutputPanel({ t, currentJSON, workflowObj, streamingText, status, outputView, setOutputView, outputFilename, copied, handleCopy, shareState, handleShare, handleDownload, shareSecrets, shareSecretsSummary, handleShareAnyway, handleShareCancel }) {
+export default function OutputPanel({ t, currentJSON, workflowObj, streamingText, status, outputView, setOutputView, outputFilename, copied, handleCopy, shareState, handleShare, handleDownload, shareSecrets, shareSecretsSummary, handleShareAnyway, handleShareCancel, riskNames }) {
   return (
     <>
     <div className="card-header">
@@ -57,7 +57,7 @@ export default function OutputPanel({ t, currentJSON, workflowObj, streamingText
 
         {currentJSON ? (
           outputView === 'preview' ? (
-            <WorkflowPreview workflow={workflowObj} t={t} />
+            <WorkflowPreview workflow={workflowObj} t={t} riskNames={riskNames} />
           ) : (
             <pre className="output-code" tabIndex={0} aria-label={t('outputTitle')}>{currentJSON}</pre>
           )
