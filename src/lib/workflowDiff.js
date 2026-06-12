@@ -27,8 +27,11 @@ function nodeSignature(n) {
   })
 }
 
-// Flatten a workflow's connections into a map of "source\u0000target" -> {from, to}
-// so added/removed edges can be compared as a set, independent of ordering.
+// Flatten a workflow's connections into a map of "source\u0000output\u0000target"
+// -> {from, to} so added/removed edges can be compared as a set, independent
+// of ordering. Including the output name in the key makes a connection-type
+// change (an edge moving from `main` to e.g. `ai_languageModel` between the
+// same two nodes) visible as a removed + added pair instead of "no changes".
 function connectionMap(wf) {
   const map = new Map()
   const conns = (wf && wf.connections && typeof wf.connections === 'object' && !Array.isArray(wf.connections))
@@ -43,7 +46,7 @@ function connectionMap(wf) {
         if (!Array.isArray(group)) continue
         for (const target of group) {
           const to = target && target.node
-          if (to) map.set(from + '\u0000' + to, { from, to })
+          if (to) map.set(from + '\u0000' + outName + '\u0000' + to, { from, to })
         }
       }
     }

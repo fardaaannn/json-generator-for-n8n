@@ -1,4 +1,4 @@
-import { useLanguage } from '../lib/i18n'
+import { useLanguage } from '../lib/useLanguage'
 import { REFERENCES } from '../lib/references'
 
 export default function References() {

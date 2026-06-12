@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { PROVIDERS } from './lib/providers'
 import { EXAMPLES } from './lib/examples'
 import { fetchModels, getModelMeta, formatModelMeta } from './lib/modelCatalog'
-import { useLanguage } from './lib/i18n'
+import { useLanguage } from './lib/useLanguage'
 import { useWorkflowGeneration } from './lib/useWorkflowGeneration'
 import { useN8nImport } from './lib/useN8nImport'
 import { formatRelativeTime, formatAbsoluteTime } from './lib/timeFormat'
@@ -24,6 +24,14 @@ export default function App() {
   const [wfName, setWfName] = useState('')
   const [complexity, setComplexity] = useState('medium')
   const [lang, setLang] = useState(uiLang)
+  // Follow the UI language until the user explicitly picks a comment language
+  // (then their choice wins) — previously this only snapshotted the UI
+  // language once at mount, so switching the UI later silently kept the old
+  // comment language.
+  const langTouchedRef = useRef(false)
+  useEffect(() => {
+    if (!langTouchedRef.current) setLang(uiLang)
+  }, [uiLang])
 
   const [provider, setProvider] = useState('anthropic')
   const initialModels = PROVIDERS['anthropic'].models
@@ -45,7 +53,9 @@ export default function App() {
   const [rememberKey, setRememberKey] = useState(false)
   const [showKey, setShowKey] = useState(false)
 
-  const [copied, setCopied] = useState(false)
+  // '' | 'ok' | 'fail' — clipboard writes can be rejected (permissions,
+  // insecure context), so failure gets surfaced on the button too.
+  const [copied, setCopied] = useState('')
   const [shareState, setShareState] = useState('') // '' | 'copied' | 'toolong'
   const [outputView, setOutputView] = useState('json')
 
@@ -68,7 +78,7 @@ export default function App() {
     refineInstruction, setRefineInstruction,
     history, showHistory, setShowHistory,
     lastDiff, setLastDiff,
-    generate, refine, restoreHistory, clearHistory,
+    generate, refine, cancel, restoreHistory, clearHistory,
     loadWorkflow, togglePin,
   } = gen
 
@@ -277,8 +287,13 @@ export default function App() {
   const handleCopy = useCallback(() => {
     if (!currentJSON) return
     navigator.clipboard.writeText(currentJSON).then(() => {
-      setCopied(true)
-      setTimeout(() => setCopied(false), 2000)
+      setCopied('ok')
+      setTimeout(() => setCopied(''), 2000)
+    }).catch(() => {
+      // Without this, a rejected clipboard write was an unhandled rejection
+      // and the button silently did nothing.
+      setCopied('fail')
+      setTimeout(() => setCopied(''), 2500)
     })
   }, [currentJSON])
 
@@ -508,7 +523,8 @@ export default function App() {
                   {t('apiKeyFreeHelp')}{' '}
                   <a href={FREE_KEY_URL} target="_blank" rel="noopener noreferrer">
                     tokengratis.id <span aria-hidden="true">&rarr;</span>
-                  </a>
+                  </a>{' '}
+                  ({t('apiKeyFreeDisclaim')})
                 </p>
                 <div style={{marginTop:'6px'}}>
                   <label className="checkbox-label">
@@ -563,7 +579,7 @@ export default function App() {
                 </div>
                 <div>
                   <label className="field-label" htmlFor="commentLang">{t('commentLang')}</label>
-                  <select id="commentLang" value={lang} onChange={(e) => setLang(e.target.value)}>
+                  <select id="commentLang" value={lang} onChange={(e) => { langTouchedRef.current = true; setLang(e.target.value) }}>
                     <option value="id">{t('optIndonesian')}</option>
                     <option value="en">{t('optEnglish')}</option>
                   </select>
@@ -575,6 +591,11 @@ export default function App() {
               <span>{isGenerating ? t('generating') : t('generateBtn')}</span>
               <div className="spinner" style={{display: isGenerating ? 'block' : 'none'}} aria-hidden="true"></div>
             </button>
+            {isGenerating && (
+              <button type="button" className="btn-sm" onClick={cancel} style={{marginTop:'8px'}}>
+                {t('cancelBtn')}
+              </button>
+            )}
 
             {errorMsg && (
               <div className="error-msg" role="alert">
@@ -596,7 +617,7 @@ export default function App() {
           <div className="card-header">
             <span className="card-title">{t('outputTitle')}</span>
             <div style={{display:'flex', gap:'6px'}}>
-              <button type="button" className="btn-sm" onClick={handleCopy} disabled={!currentJSON}>{copied ? t('copied') : t('copy')}</button>
+              <button type="button" className="btn-sm" onClick={handleCopy} disabled={!currentJSON}>{copied === 'fail' ? t('copyFailed') : copied === 'ok' ? t('copied') : t('copy')}</button>
               <button type="button" className="btn-sm" onClick={handleShare} disabled={!currentJSON} title={t('shareBtn')}>
                 <span aria-hidden="true">&#128279; </span>{shareState === 'copied' ? t('shareCopied') : t('shareBtn')}
               </button>
@@ -710,6 +731,11 @@ export default function App() {
                 >
                   {isRefining ? t('refining') : t('refineBtn')}
                 </button>
+                {isRefining && (
+                  <button type="button" className="btn-sm" onClick={cancel}>
+                    {t('cancelBtn')}
+                  </button>
+                )}
               </div>
             </div>
           )}
