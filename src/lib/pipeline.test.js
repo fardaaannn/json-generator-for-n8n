@@ -12,6 +12,8 @@ import {
   assertHttpUrl,
   isLocalHttpHost,
   isMaxTokensError,
+  unwrapWorkflow,
+  buildStructureRepairPrompt,
   importToN8n,
   EXAMPLE_JSON,
 } from './pipeline.js'
@@ -610,5 +612,82 @@ describe('importToN8n', () => {
     await expect(importToN8n(args)).rejects.toThrow('errN8nAuth')
     stubFetch(() => jsonResponse(400, { message: 'bad node' }))
     await expect(importToN8n({ ...args, workflowId: 'id1' })).rejects.toThrow('errN8nBadRequest')
+  })
+})
+
+
+describe('unwrapWorkflow', () => {
+  const wf = { name: 'WF', nodes: [{ id: '1', type: 'n8n-nodes-base.webhook' }], connections: {} }
+
+  it('returns a proper workflow unchanged (same reference)', () => {
+    expect(unwrapWorkflow(wf)).toBe(wf)
+  })
+
+  it('unwraps the common wrapper keys', () => {
+    for (const key of ['workflow', 'data', 'json', 'output', 'result']) {
+      expect(unwrapWorkflow({ [key]: wf })).toBe(wf)
+    }
+  })
+
+  it('unwraps a single-key envelope up to two levels deep', () => {
+    expect(unwrapWorkflow({ response: wf })).toBe(wf)
+    expect(unwrapWorkflow({ response: { payload: wf } })).toBe(wf)
+    // three levels is beyond the safe-guess limit
+    const deep = { a: { b: { c: wf } } }
+    expect(unwrapWorkflow(deep)).toBe(deep)
+  })
+
+  it('wraps a bare nodes array into a workflow', () => {
+    const nodes = [
+      { id: '1', name: 'Webhook', type: 'n8n-nodes-base.webhook' },
+      { id: '2', name: 'Slack', type: 'n8n-nodes-base.slack' },
+    ]
+    const out = unwrapWorkflow(nodes)
+    expect(out.nodes).toBe(nodes)
+    expect(out.connections).toEqual({})
+    expect(typeof out.name).toBe('string')
+  })
+
+  it('takes the workflow out of a one-element array', () => {
+    expect(unwrapWorkflow([wf])).toBe(wf)
+  })
+
+  it('leaves non-workflow shapes alone', () => {
+    const notWf = { foo: 1, bar: 2 }
+    expect(unwrapWorkflow(notWf)).toBe(notWf)
+    const arr = [1, 2, 3]
+    expect(unwrapWorkflow(arr)).toBe(arr)
+    expect(unwrapWorkflow(null)).toBe(null)
+    expect(unwrapWorkflow('x')).toBe('x')
+  })
+})
+
+describe('repairJSON parse-error tagging', () => {
+  it('marks unrecoverable parse failures with isJsonInvalid', () => {
+    try {
+      repairJSON('this is not json at all')
+      expect.unreachable('should have thrown')
+    } catch (e) {
+      expect(e.message).toBe('errJsonInvalid')
+      expect(e.isJsonInvalid).toBe(true)
+    }
+  })
+})
+
+describe('buildStructureRepairPrompt', () => {
+  it('embeds the raw output and the schema rules (both languages)', () => {
+    const en = buildStructureRepairPrompt({ rawText: 'oops {bad', version: '1.x', lang: 'en' })
+    expect(en).toContain('oops {bad')
+    expect(en).toContain('name, nodes, connections, active, settings')
+    expect(en).toContain('1.x')
+    const id = buildStructureRepairPrompt({ rawText: 'oops {bad', version: '1.x', lang: 'id' })
+    expect(id).toContain('oops {bad')
+    expect(id).toContain('tanpa objek pembungkus')
+  })
+
+  it('caps pathological raw output length', () => {
+    const big = 'x'.repeat(200000)
+    const p = buildStructureRepairPrompt({ rawText: big, version: '1.x', lang: 'en' })
+    expect(p.length).toBeLessThan(70000)
   })
 })

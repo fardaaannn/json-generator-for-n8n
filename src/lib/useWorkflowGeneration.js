@@ -5,6 +5,8 @@ import {
   buildPrompt,
   buildRefinePrompt,
   buildRepairPrompt,
+  buildStructureRepairPrompt,
+  unwrapWorkflow,
   cleanOutput,
   repairJSON,
   normalizeConnections,
@@ -279,8 +281,25 @@ export function useWorkflowGeneration({ t, onRunStart }) {
 
     try {
       const firstText = await getModelText(prompt, { stream: true })
-      const first = repairJSON(cleanOutput(firstText), t)
-      let parsed = first.value
+      // Parse the output; when it isn't valid JSON at all, self-heal once by
+      // handing the raw text back to the model ("fix your previous output").
+      // Tracked via healedStructure so the run does at most ONE extra model
+      // call in total (this heal and the warnings heal below are exclusive).
+      let first
+      let healedStructure = false
+      try {
+        first = repairJSON(cleanOutput(firstText), t)
+      } catch (parseErr) {
+        if (!autoFix || !parseErr.isJsonInvalid) throw parseErr
+        setStatus({ state: 'active', key: 'statusFixing', params: {} })
+        const fixPrompt = buildStructureRepairPrompt({ rawText: firstText, version: N8N_VERSION, lang: config.lang })
+        const fixText = await getModelText(fixPrompt, { stream: false })
+        first = repairJSON(cleanOutput(fixText), t)
+        healedStructure = true
+      }
+      // Deterministic envelope fixes (wrapper objects / bare node arrays)
+      // before validation, so these never need a model round-trip.
+      let parsed = unwrapWorkflow(first.value)
       let repaired = first.repaired
       // Fix connections that reference node ids instead of names (some models
       // do this), so links survive import and render in the preview.
@@ -294,7 +313,7 @@ export function useWorkflowGeneration({ t, onRunStart }) {
       // Self-heal: if the first result has validation issues, ask the model
       // ONCE to fix exactly those issues, then keep whichever result is cleaner.
       // Best-effort — a heal failure leaves the original result untouched.
-      if (autoFix && resultWarnings.length > 0) {
+      if (autoFix && !healedStructure && resultWarnings.length > 0) {
         setStatus({ state: 'active', key: 'statusFixing', params: {} })
         try {
           const fixPrompt = buildRepairPrompt({
@@ -305,11 +324,12 @@ export function useWorkflowGeneration({ t, onRunStart }) {
           })
           const fixText = await getModelText(fixPrompt, { stream: false })
           const healed = repairJSON(cleanOutput(fixText), t)
-          normalizeConnections(healed.value)
-          localRepair(healed.value)
-          const healedWarnings = validateStructure(healed.value, t)
+          const healedValue = unwrapWorkflow(healed.value)
+          normalizeConnections(healedValue)
+          localRepair(healedValue)
+          const healedWarnings = validateStructure(healedValue, t)
           if (healedWarnings.length < resultWarnings.length) {
-            parsed = healed.value
+            parsed = healedValue
             repaired = repaired || healed.repaired
             resultWarnings = healedWarnings
           }
@@ -409,6 +429,9 @@ export function useWorkflowGeneration({ t, onRunStart }) {
       setErrorMsg(t('errWorkflowJsonInvalid'))
       return false
     }
+    // Accept common envelopes around pasted JSON too (e.g. an API response
+    // wrapping the workflow) before rejecting on shape.
+    parsed = unwrapWorkflow(parsed)
     if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed) || !Array.isArray(parsed.nodes)) {
       setErrorMsg(t('errWorkflowJsonShape'))
       return false

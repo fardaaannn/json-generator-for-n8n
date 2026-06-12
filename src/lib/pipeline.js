@@ -354,6 +354,54 @@ Langsung output JSON valid saja — tanpa penjelasan, tanpa markdown, tanpa back
 }
 
 /**
+ * Build a structure-heal prompt: the model's previous output could not be
+ * parsed into JSON at all (or into anything workflow-shaped), so hand the raw
+ * text back and ask for the complete corrected workflow JSON. Used at most
+ * once per run, only when self-heal is enabled.
+ */
+export function buildStructureRepairPrompt({ rawText, version, lang }) {
+  const L = lang === 'en' ? 'en' : 'id';
+  // Guard against pathological output sizes; the broken JSON is usually well
+  // under this and the tail matters less than the start.
+  const text = String(rawText || '').slice(0, 60000);
+
+  if (L === 'en') {
+    return `You are an expert n8n workflow builder. Your previous output (below) is NOT valid workflow JSON — it may be malformed, truncated, or wrapped in extra text. Reconstruct it as ONE complete, valid n8n workflow JSON object.
+
+<previous_output>
+${text}
+</previous_output>
+
+RULES:
+- Target n8n version: ${version}
+- Top-level keys: name, nodes, connections, active, settings — nothing else, no wrapper object
+- every node needs a unique id, a descriptive name, a valid "namespace.node" type, a position [x,y], and parameters
+- "connections" must be keyed by node NAME and only reference node names that exist
+- keep all of the intended nodes and connections from the previous output; fix, do not redesign
+
+OUTPUT FORMAT:
+Output valid JSON only — no explanation, no markdown, no backticks. Start with { and end with }.`;
+  }
+
+  return `Kamu adalah expert n8n workflow builder. Output kamu sebelumnya (di bawah) BUKAN workflow JSON yang valid — mungkin rusak, terpotong, atau terbungkus teks lain. Susun ulang menjadi SATU objek JSON workflow n8n yang lengkap dan valid.
+
+<previous_output>
+${text}
+</previous_output>
+
+ATURAN:
+- Target versi n8n: ${version}
+- Key top-level: name, nodes, connections, active, settings — tidak ada yang lain, tanpa objek pembungkus
+- setiap node wajib punya id unik, name deskriptif, type "namespace.node" yang valid, position [x,y], dan parameters
+- "connections" harus di-key dengan NAMA node dan hanya merujuk nama node yang ada
+- pertahankan semua node dan koneksi yang dimaksud dari output sebelumnya; perbaiki, jangan rancang ulang
+
+FORMAT OUTPUT:
+Langsung output JSON valid saja, tanpa penjelasan, tanpa markdown, tanpa backtick.
+JSON harus dimulai dengan { dan diakhiri dengan }.`;
+}
+
+/**
  * Strip markdown fences and any prose surrounding the JSON, returning the
  * substring from the first "{" to the last "}".
  */
@@ -395,11 +443,63 @@ export function repairJSON(raw, t = fallbackT) {
       try {
         return { value: JSON.parse(fixed), repaired: true };
       } catch (e2) {
-        throw new Error(t('errJsonInvalid'));
+        throw jsonInvalidError(t);
       }
     }
-    throw new Error(t('errJsonInvalid'));
+    throw jsonInvalidError(t);
   }
+}
+
+// Parse failures are tagged so the generation flow can distinguish "the model
+// produced unusable JSON" (healable by a retry asking it to fix its output)
+// from other errors.
+function jsonInvalidError(t) {
+  const err = new Error(t('errJsonInvalid'));
+  err.isJsonInvalid = true;
+  return err;
+}
+
+/**
+ * Deterministic structure repair for common "right content, wrong envelope"
+ * model outputs, applied before validation so these never need a model
+ * round-trip:
+ *   - wrapper objects: { workflow: {...} }, { data: {...} }, { json: {...} },
+ *     { output: {...} }, { result: {...} }, or any single-key object whose
+ *     value looks like a workflow (recurses up to 2 levels)
+ *   - a bare nodes array: [ {node}, {node} ] -> wrapped into a workflow
+ *   - a one-element array containing the workflow
+ * Anything else is returned unchanged — never guess beyond safe cases.
+ */
+export function unwrapWorkflow(parsed, depth = 0) {
+  const looksLikeWorkflow = (v) =>
+    v && typeof v === 'object' && !Array.isArray(v) && Array.isArray(v.nodes);
+  const looksLikeNode = (v) =>
+    v && typeof v === 'object' && !Array.isArray(v) && (typeof v.type === 'string' || typeof v.name === 'string');
+
+  if (looksLikeWorkflow(parsed) || depth >= 2) return parsed;
+
+  if (Array.isArray(parsed)) {
+    if (parsed.length === 1 && looksLikeWorkflow(parsed[0])) return parsed[0];
+    if (parsed.length > 0 && parsed.every(looksLikeNode)) {
+      return { name: 'My Workflow', nodes: parsed, connections: {} };
+    }
+    return parsed;
+  }
+
+  if (parsed && typeof parsed === 'object') {
+    for (const key of ['workflow', 'data', 'json', 'output', 'result']) {
+      if (looksLikeWorkflow(parsed[key])) return parsed[key];
+    }
+    const keys = Object.keys(parsed);
+    if (keys.length === 1) {
+      const inner = parsed[keys[0]];
+      if (inner && typeof inner === 'object') {
+        const unwrapped = unwrapWorkflow(inner, depth + 1);
+        if (looksLikeWorkflow(unwrapped)) return unwrapped;
+      }
+    }
+  }
+  return parsed;
 }
 
 // Scan a JSON prefix and return the stack of brackets ('{' / '[') that are
