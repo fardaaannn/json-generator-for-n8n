@@ -6,17 +6,19 @@ import { useLanguage } from './lib/useLanguage'
 import { useWorkflowGeneration } from './lib/useWorkflowGeneration'
 import { useN8nImport } from './lib/useN8nImport'
 import { loadStoredKeys, persistKeys, keyForProvider, setKeyForProvider } from './lib/apiKeyStore'
-import { formatRelativeTime, formatAbsoluteTime } from './lib/timeFormat'
 import { encodeWorkflow, decodeShare, buildShareUrl, readShareParam } from './lib/shareLink'
 import Header from './components/Header'
 import Hero from './components/Hero'
 import References from './components/References'
 import Footer from './components/Footer'
-import WorkflowPreview from './components/WorkflowPreview'
-
-// Third-party resource where users can obtain a free provider API key/token.
-// External service, outside this project's control (see disclaimer wording).
-const FREE_KEY_URL = 'https://www.tokengratis.id/'
+import OutputPanel from './components/OutputPanel'
+import EditExistingPanel from './components/EditExistingPanel'
+import ProviderSettings from './components/ProviderSettings'
+import GenerationOptions from './components/GenerationOptions'
+import RefineDiff from './components/RefineDiff'
+import RefineBar from './components/RefineBar'
+import N8nImportPanel from './components/N8nImportPanel'
+import HistoryPanel from './components/HistoryPanel'
 
 export default function App() {
   const { t, lang: uiLang } = useLanguage()
@@ -407,194 +409,63 @@ export default function App() {
               </div>
             </div>
 
-            <div className="n8n-import">
-              <button
-                type="button"
-                className="n8n-import-toggle"
-                onClick={() => setShowImportJson((v) => !v)}
-                aria-expanded={showImportJson}
-                aria-controls="import-json-body"
-              >
-                <span>{t('editExistingTitle')}</span>
-                <span className="n8n-import-chevron" aria-hidden="true">{showImportJson ? '\u2212' : '+'}</span>
-              </button>
-              {showImportJson && (
-                <div className="n8n-import-body" id="import-json-body">
-                  <p className="security-notice">{t('editExistingDesc')}</p>
-                  <div>
-                    <label className="field-label" htmlFor="importJson">{t('pasteWorkflowLabel')}</label>
-                    <textarea
-                      id="importJson"
-                      rows="6"
-                      value={importJson}
-                      onChange={(e) => { setImportJson(e.target.value); setErrorMsg('') }}
-                      placeholder={t('pasteWorkflowPlaceholder')}
-                    />
-                  </div>
-                  <button
-                    type="button"
-                    className="btn-primary"
-                    onClick={handleLoadWorkflow}
-                    disabled={!importJson.trim()}
-                  >
-                    <span>{t('loadWorkflowBtn')}</span>
-                  </button>
-                </div>
-              )}
-            </div>
+            <EditExistingPanel
+              t={t}
+              showImportJson={showImportJson}
+              setShowImportJson={setShowImportJson}
+              importJson={importJson}
+              setImportJson={setImportJson}
+              setErrorMsg={setErrorMsg}
+              handleLoadWorkflow={handleLoadWorkflow}
+            />
 
             <div className="divider"></div>
 
-            <fieldset className="field-group">
-              <legend className="field-label">{t('aiProvider')}</legend>
-              <div className="grid-2">
-                <div>
-                  <label className="field-label field-label-row" htmlFor="provider">
-                    <span>{t('provider')}</span>
-                  </label>
-                  <select id="provider" value={provider} onChange={handleProviderChange}>
-                    <option value="anthropic">Anthropic (Claude)</option>
-                    <option value="openai">OpenAI (GPT)</option>
-                    <option value="groq">Groq</option>
-                    <option value="openrouter">OpenRouter</option>
-                    <option value="custom">Custom / OpenAI-compat</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="field-label field-label-row" htmlFor="model">
-                    <span>
-                      {t('model')}
-                      {modelsLoading && <span className="model-hint"> · {t('modelsLoading')}</span>}
-                    </span>
-                    {canRefreshModels && (
-                      <button
-                        type="button"
-                        className="model-refresh"
-                        onClick={refreshModels}
-                        disabled={modelsLoading}
-                        aria-label={t('modelsRefresh')}
-                        title={t('modelsRefresh')}
-                      >
-                        &#8635;
-                      </button>
-                    )}
-                  </label>
-                  <select
-                    id="model"
-                    value={selectedModel}
-                    onChange={(e) => { setSelectedModel(e.target.value); setErrorMsg('') }}
-                    disabled={provider === 'custom' && modelOptions.length === 0}
-                  >
-                    {modelOptions.map((m) => {
-                      const star = recommendedSet.has(m) ? '\u2605 ' : ''
-                      const meta = formatModelMeta(modelsMeta[m])
-                      return (
-                        <option key={m} value={m}>{star + m + (meta ? '  \u2014  ' + meta : '')}</option>
-                      )
-                    })}
-                    <option value="__custom__">{t('customOther')}</option>
-                  </select>
-                  <p className="model-note">{t('modelQualityHint')}</p>
-                  {hasModelMeta && <p className="model-note">{t('modelMetaLegend')}</p>}
-                  {needsKeyForModels && <p className="model-note">{t('modelsEnterKey')}</p>}
-                  {modelsError && <p className="model-note">{t('modelsFetchError')}</p>}
-                </div>
-              </div>
-              {showCustomModel && (
-                <div style={{marginTop:'10px'}}>
-                  <label className="field-label" htmlFor="customModel">{t('modelName')}</label>
-                  <input id="customModel" type="text" value={customModel} onChange={(e) => setCustomModel(e.target.value)} placeholder={t('modelNamePlaceholder')} />
-                </div>
-              )}
-              <div style={{marginTop:'10px'}}>
-                <label className="field-label" htmlFor="apiKey">{t('apiKey')} <span style={{fontWeight:400, opacity:0.7}}>({providerConfig.name}) {t('required')}</span></label>
-                <div className="password-wrap">
-                  <input
-                    id="apiKey"
-                    type={showKey ? 'text' : 'password'}
-                    value={apiKey}
-                    onChange={(e) => handleApiKeyInput(e.target.value)}
-                    placeholder="sk-..."
-                    aria-required="true"
-                    autoComplete="off"
-                  />
-                  <button
-                    type="button"
-                    className="eye-btn"
-                    onClick={() => setShowKey(!showKey)}
-                    aria-label={showKey ? t('hideKey') : t('showKey')}
-                    aria-pressed={showKey}
-                  >
-                    {showKey ? '\u25C9' : '\u25C7'}
-                  </button>
-                </div>
-                <p className="apikey-help">
-                  {t('apiKeyFreeHelp')}{' '}
-                  <a href={FREE_KEY_URL} target="_blank" rel="noopener noreferrer">
-                    tokengratis.id <span aria-hidden="true">&rarr;</span>
-                  </a>{' '}
-                  ({t('apiKeyFreeDisclaim')})
-                </p>
-                <div style={{marginTop:'6px'}}>
-                  <label className="checkbox-label">
-                    <input type="checkbox" checked={rememberKey} onChange={handleRememberChange} />
-                    {t('rememberKey')}
-                  </label>
-                </div>
-                <p className="security-notice">
-                  {t('securityDirect')}
-                </p>
-                {rememberKey && (
-                  <p className="security-notice warn">
-                    {t('securityRemember')}
-                  </p>
-                )}
-              </div>
-              {showBaseUrl && (
-                <div style={{marginTop:'10px'}}>
-                  <label className="field-label" htmlFor="baseUrl">{t('baseUrl')} <span style={{fontWeight:400,opacity:0.7}}>{t('baseUrlHint')}</span></label>
-                  <input id="baseUrl" type="url" value={baseUrl} onChange={(e) => setBaseUrl(e.target.value)} placeholder="https://ai.sumopod.com/v1" />
-                  <div style={{marginTop:'6px'}}>
-                    <label className="checkbox-label">
-                      <input type="checkbox" checked={rememberBaseUrl} onChange={handleRememberBaseUrlChange} />
-                      {t('rememberBaseUrl')}
-                    </label>
-                  </div>
-                </div>
-              )}
-              <div style={{marginTop:'10px'}}>
-                <div className="connection-badge">
-                  <span style={{fontSize:'8px'}} aria-hidden="true">&#9679;</span> {t('directConnection')} &mdash; {providerConfig.name}
-                </div>
-              </div>
-            </fieldset>
+            <ProviderSettings
+              t={t}
+              provider={provider}
+              handleProviderChange={handleProviderChange}
+              providerConfig={providerConfig}
+              modelsLoading={modelsLoading}
+              modelsError={modelsError}
+              canRefreshModels={canRefreshModels}
+              refreshModels={refreshModels}
+              selectedModel={selectedModel}
+              setSelectedModel={setSelectedModel}
+              modelOptions={modelOptions}
+              modelsMeta={modelsMeta}
+              recommendedSet={recommendedSet}
+              hasModelMeta={hasModelMeta}
+              needsKeyForModels={needsKeyForModels}
+              showCustomModel={showCustomModel}
+              customModel={customModel}
+              setCustomModel={setCustomModel}
+              apiKey={apiKey}
+              handleApiKeyInput={handleApiKeyInput}
+              showKey={showKey}
+              setShowKey={setShowKey}
+              rememberKey={rememberKey}
+              handleRememberChange={handleRememberChange}
+              showBaseUrl={showBaseUrl}
+              baseUrl={baseUrl}
+              setBaseUrl={setBaseUrl}
+              rememberBaseUrl={rememberBaseUrl}
+              handleRememberBaseUrlChange={handleRememberBaseUrlChange}
+              setErrorMsg={setErrorMsg}
+            />
 
             <div className="divider"></div>
 
-            <fieldset className="field-group">
-              <legend className="field-label">{t('options')}</legend>
-              <div className="grid-2">
-                <div style={{ gridColumn: '1 / -1' }}>
-                  <label className="field-label" htmlFor="wfName">{t('wfName')}</label>
-                  <input id="wfName" type="text" value={wfName} onChange={(e) => setWfName(e.target.value)} placeholder="My Workflow" />
-                </div>
-                <div>
-                  <label className="field-label" htmlFor="complexity">{t('complexity')}</label>
-                  <select id="complexity" value={complexity} onChange={(e) => setComplexity(e.target.value)}>
-                    <option value="simple">{t('complexitySimple')}</option>
-                    <option value="medium">{t('complexityMedium')}</option>
-                    <option value="complex">{t('complexityComplex')}</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="field-label" htmlFor="commentLang">{t('commentLang')}</label>
-                  <select id="commentLang" value={lang} onChange={(e) => { langTouchedRef.current = true; setLang(e.target.value) }}>
-                    <option value="id">{t('optIndonesian')}</option>
-                    <option value="en">{t('optEnglish')}</option>
-                  </select>
-                </div>
-              </div>
-            </fieldset>
+            <GenerationOptions
+              t={t}
+              wfName={wfName}
+              setWfName={setWfName}
+              complexity={complexity}
+              setComplexity={setComplexity}
+              lang={lang}
+              setLang={setLang}
+              langTouchedRef={langTouchedRef}
+            />
 
             <button className="btn-primary" onClick={handleGenerate} disabled={isGenerating} aria-busy={isGenerating}>
               <span>{isGenerating ? t('generating') : t('generateBtn')}</span>
@@ -623,279 +494,52 @@ export default function App() {
         </div>
 
         <div className="card output-card">
-          <div className="card-header">
-            <span className="card-title">{t('outputTitle')}</span>
-            <div style={{display:'flex', gap:'6px'}}>
-              <button type="button" className="btn-sm" onClick={handleCopy} disabled={!currentJSON}>{copied === 'fail' ? t('copyFailed') : copied === 'ok' ? t('copied') : t('copy')}</button>
-              <button type="button" className="btn-sm" onClick={handleShare} disabled={!currentJSON} title={t('shareBtn')}>
-                <span aria-hidden="true">&#128279; </span>{shareState === 'copied' ? t('shareCopied') : t('shareBtn')}
-              </button>
-              <button type="button" className="btn-sm btn-dl" onClick={handleDownload} disabled={!currentJSON}><span aria-hidden="true">&darr; </span>{t('download')}</button>
-            </div>
-          </div>
-          {shareState === 'toolong' && (
-            <div className="warning-msg" role="status" style={{margin:'0 0 8px'}}>
-              <span aria-hidden="true">&#9888; </span>{t('shareTooLong')}
-            </div>
-          )}
-          <div className="output-toolbar">
-            <span className="output-filename">{outputFilename}</span>
-            {currentJSON && (
-              <div className="output-view-toggle" role="group" aria-label={t('viewToggle')}>
-                <button
-                  type="button"
-                  className={'view-btn' + (outputView === 'json' ? ' active' : '')}
-                  onClick={() => setOutputView('json')}
-                  aria-pressed={outputView === 'json'}
-                >
-                  {t('viewJson')}
-                </button>
-                <button
-                  type="button"
-                  className={'view-btn' + (outputView === 'preview' ? ' active' : '')}
-                  onClick={() => setOutputView('preview')}
-                  aria-pressed={outputView === 'preview'}
-                >
-                  {t('viewPreview')}
-                </button>
-              </div>
-            )}
-          </div>
+          <OutputPanel
+            t={t}
+            currentJSON={currentJSON}
+            workflowObj={workflowObj}
+            streamingText={streamingText}
+            status={status}
+            outputView={outputView}
+            setOutputView={setOutputView}
+            outputFilename={outputFilename}
+            copied={copied}
+            handleCopy={handleCopy}
+            shareState={shareState}
+            handleShare={handleShare}
+            handleDownload={handleDownload}
+          />
 
-          {currentJSON ? (
-            outputView === 'preview' ? (
-              <WorkflowPreview workflow={workflowObj} t={t} />
-            ) : (
-              <pre className="output-code" tabIndex={0} aria-label={t('outputTitle')}>{currentJSON}</pre>
-            )
-          ) : streamingText ? (
-            <pre className="output-code output-streaming" tabIndex={0} aria-label={t('outputTitle')} aria-live="polite">{streamingText}</pre>
-          ) : (
-            <div className="output-placeholder">
-              <div className="placeholder-icon" aria-hidden="true">{'{ }'}</div>
-              <div className="placeholder-text">{t('outputPlaceholder')}</div>
-            </div>
-          )}
-          <div className="status-bar" role="status" aria-live="polite">
-            <div className={'status-dot' + (status.state ? ' ' + status.state : '')} aria-hidden="true"></div>
-            <span>{t(status.key, status.params)}</span>
-          </div>
+          <RefineDiff t={t} lastDiff={lastDiff} setLastDiff={setLastDiff} />
 
-          {lastDiff && (
-            <div className="refine-diff" role="status" aria-live="polite">
-              <div className="refine-diff-head">
-                <span className="refine-diff-title">{t('diffTitle')}</span>
-                <button
-                  type="button"
-                  className="refine-diff-dismiss"
-                  onClick={() => setLastDiff(null)}
-                  aria-label={t('diffDismiss')}
-                >
-                  &times;
-                </button>
-              </div>
-              {lastDiff.hasChanges ? (
-                <ul className="refine-diff-list">
-                  {lastDiff.addedNodes.length > 0 && (
-                    <li className="d-added">{t('diffAddedNodes', { items: lastDiff.addedNodes.join(', ') })}</li>
-                  )}
-                  {lastDiff.removedNodes.length > 0 && (
-                    <li className="d-removed">{t('diffRemovedNodes', { items: lastDiff.removedNodes.join(', ') })}</li>
-                  )}
-                  {lastDiff.modifiedNodes.length > 0 && (
-                    <li className="d-modified">{t('diffModifiedNodes', { items: lastDiff.modifiedNodes.join(', ') })}</li>
-                  )}
-                  {lastDiff.addedConnections.length > 0 && (
-                    <li className="d-added">{t('diffAddedConns', { items: lastDiff.addedConnections.map((c) => c.from + ' \u2192 ' + c.to).join(', ') })}</li>
-                  )}
-                  {lastDiff.removedConnections.length > 0 && (
-                    <li className="d-removed">{t('diffRemovedConns', { items: lastDiff.removedConnections.map((c) => c.from + ' \u2192 ' + c.to).join(', ') })}</li>
-                  )}
-                </ul>
-              ) : (
-                <p className="refine-diff-none">{t('diffNoChanges')}</p>
-              )}
-            </div>
-          )}
+          <RefineBar
+            t={t}
+            currentJSON={currentJSON}
+            refineInstruction={refineInstruction}
+            setRefineInstruction={setRefineInstruction}
+            isRefining={isRefining}
+            handleRefine={handleRefine}
+            cancel={cancel}
+          />
 
-          {currentJSON && (
-            <div className="refine">
-              <label className="field-label" htmlFor="refine">{t('refineLabel')}</label>
-              <div className="refine-row">
-                <input
-                  id="refine"
-                  type="text"
-                  value={refineInstruction}
-                  onChange={(e) => setRefineInstruction(e.target.value)}
-                  onKeyDown={(e) => { if (e.key === 'Enter' && !isRefining && refineInstruction.trim()) handleRefine() }}
-                  placeholder={t('refinePlaceholder')}
-                  disabled={isRefining}
-                />
-                <button
-                  type="button"
-                  className="btn-sm refine-btn"
-                  onClick={handleRefine}
-                  disabled={isRefining || !refineInstruction.trim()}
-                  aria-busy={isRefining}
-                >
-                  {isRefining ? t('refining') : t('refineBtn')}
-                </button>
-                {isRefining && (
-                  <button type="button" className="btn-sm" onClick={cancel}>
-                    {t('cancelBtn')}
-                  </button>
-                )}
-              </div>
-            </div>
-          )}
+          <N8nImportPanel
+            t={t}
+            n8n={n8n}
+            currentJSON={currentJSON}
+            handleImportToN8n={handleImportToN8n}
+            handleUpdateInN8n={handleUpdateInN8n}
+          />
 
-          <div className="n8n-import">
-            <button
-              type="button"
-              className="n8n-import-toggle"
-              onClick={() => n8n.setShowN8nImport((v) => !v)}
-              aria-expanded={n8n.showN8nImport}
-              aria-controls="n8n-import-body"
-            >
-              <span>{t('n8nImportTitle')}</span>
-              <span className="n8n-import-chevron" aria-hidden="true">{n8n.showN8nImport ? '\u2212' : '+'}</span>
-            </button>
-            {n8n.showN8nImport && (
-              <div className="n8n-import-body" id="n8n-import-body">
-                <p className="security-notice">{t('n8nImportDesc')}</p>
-                <div>
-                  <label className="field-label" htmlFor="n8nUrl">{t('n8nUrlLabel')} <span style={{fontWeight:400, opacity:0.7}}>{t('n8nUrlHint')}</span></label>
-                  <input
-                    id="n8nUrl"
-                    type="url"
-                    value={n8n.n8nUrl}
-                    onChange={(e) => { n8n.setN8nUrl(e.target.value); n8n.setN8nError(''); }}
-                    placeholder="https://your-n8n.example.com"
-                  />
-                </div>
-                <div>
-                  <label className="field-label" htmlFor="n8nApiKey">{t('n8nKeyLabel')}</label>
-                  <div className="password-wrap">
-                    <input
-                      id="n8nApiKey"
-                      type={n8n.showN8nKey ? 'text' : 'password'}
-                      value={n8n.n8nApiKey}
-                      onChange={(e) => { n8n.setN8nApiKey(e.target.value); n8n.setN8nError(''); }}
-                      placeholder="n8n_api_..."
-                      autoComplete="off"
-                    />
-                    <button
-                      type="button"
-                      className="eye-btn"
-                      onClick={() => n8n.setShowN8nKey(!n8n.showN8nKey)}
-                      aria-label={n8n.showN8nKey ? t('hideKey') : t('showKey')}
-                      aria-pressed={n8n.showN8nKey}
-                    >
-                      {n8n.showN8nKey ? '\u25C9' : '\u25C7'}
-                    </button>
-                  </div>
-                </div>
-                <label className="checkbox-label">
-                  <input type="checkbox" checked={n8n.rememberN8n} onChange={n8n.handleRememberN8nChange} />
-                  {t('n8nRemember')}
-                </label>
-                {n8n.linkedId ? (
-                  <div className="n8n-import-actions">
-                    <button
-                      type="button"
-                      className="btn-primary"
-                      onClick={handleUpdateInN8n}
-                      disabled={!currentJSON || n8n.n8nImporting}
-                      aria-busy={n8n.n8nImporting}
-                    >
-                      <span>{n8n.n8nImporting ? t('n8nImporting') : t('n8nUpdateBtn')}</span>
-                      <div className="spinner" style={{display: n8n.n8nImporting ? 'block' : 'none'}} aria-hidden="true"></div>
-                    </button>
-                    <button
-                      type="button"
-                      className="btn-secondary"
-                      onClick={handleImportToN8n}
-                      disabled={!currentJSON || n8n.n8nImporting}
-                    >
-                      <span>{t('n8nImportNewBtn')}</span>
-                    </button>
-                  </div>
-                ) : (
-                  <button
-                    type="button"
-                    className="btn-primary"
-                    onClick={handleImportToN8n}
-                    disabled={!currentJSON || n8n.n8nImporting}
-                    aria-busy={n8n.n8nImporting}
-                  >
-                    <span>{n8n.n8nImporting ? t('n8nImporting') : t('n8nImportBtn')}</span>
-                    <div className="spinner" style={{display: n8n.n8nImporting ? 'block' : 'none'}} aria-hidden="true"></div>
-                  </button>
-                )}
-                {n8n.n8nError && (
-                  <div className="error-msg" role="alert">
-                    <span aria-hidden="true">&#9888; </span>{n8n.n8nError}
-                  </div>
-                )}
-                {n8n.n8nResult && (
-                  <div className="success-msg" role="status">
-                    <span aria-hidden="true">&#10003; </span>{n8n.n8nResult.updated ? t('n8nUpdateSuccess') : t('n8nImportSuccess')}
-                    {n8n.n8nResult.url && (
-                      <> <a href={n8n.n8nResult.url} target="_blank" rel="noopener noreferrer">{t('n8nOpenWorkflow')}</a></>
-                    )}
-                  </div>
-                )}
-                <p className="security-notice">{t('n8nImportHint')}</p>
-              </div>
-            )}
-          </div>
-
-          {history.length > 0 && (
-            <div className="history">
-              <button
-                type="button"
-                className="n8n-import-toggle"
-                onClick={() => setShowHistory((v) => !v)}
-                aria-expanded={showHistory}
-                aria-controls="history-body"
-              >
-                <span>{t('historyTitle')} <span className="optional-tag">{history.length}</span></span>
-                <span className="n8n-import-chevron" aria-hidden="true">{showHistory ? '\u2212' : '+'}</span>
-              </button>
-              {showHistory && (
-                <div className="history-body" id="history-body">
-                  {history.map((h) => (
-                    <div key={h.id} className={'history-item' + (h.pinned ? ' pinned' : '')}>
-                      <button
-                        type="button"
-                        className="history-item-main"
-                        onClick={() => restoreHistory(h)}
-                      >
-                        <span className="history-item-name">{h.pinned ? '\u2605 ' : ''}{h.name}</span>
-                        <span className="history-item-meta">
-                          {t('historyNodes', { n: h.nodeCount })}
-                          {h.ts ? (
-                            <> &middot; <span title={formatAbsoluteTime(h.ts, uiLang)}>{formatRelativeTime(h.ts, { lang: uiLang, justNow: t('historyJustNow') })}</span></>
-                          ) : null}
-                        </span>
-                      </button>
-                      <button
-                        type="button"
-                        className={'history-item-pin' + (h.pinned ? ' active' : '')}
-                        onClick={() => togglePin(h.id)}
-                        aria-pressed={!!h.pinned}
-                        aria-label={h.pinned ? t('historyUnpin') : t('historyPin')}
-                        title={h.pinned ? t('historyUnpin') : t('historyPin')}
-                      >
-                        {h.pinned ? '\u2605' : '\u2606'}
-                      </button>
-                    </div>
-                  ))}
-                  <button type="button" className="btn-sm history-clear" onClick={clearHistory}>{t('historyClear')}</button>
-                </div>
-              )}
-            </div>
-          )}
+          <HistoryPanel
+            t={t}
+            uiLang={uiLang}
+            history={history}
+            showHistory={showHistory}
+            setShowHistory={setShowHistory}
+            restoreHistory={restoreHistory}
+            togglePin={togglePin}
+            clearHistory={clearHistory}
+          />
         </div>
       </main>
 
