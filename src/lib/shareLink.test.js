@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest'
 import {
   encodeWorkflow,
   decodeWorkflow,
+  decodeShare,
   buildShareUrl,
   readShareParam,
 } from './shareLink.js'
@@ -86,5 +87,66 @@ describe('readShareParam', () => {
     const url = buildShareUrl(token, { origin: 'https://x.io', pathname: '/app/' })
     const hash = '#' + url.split('#')[1]
     expect(readShareParam(hash)).toBe(token)
+  })
+})
+
+
+// --- helpers to fabricate tokens for version tests ---
+
+function toBase64Url(str) {
+  const bytes = new TextEncoder().encode(str)
+  let bin = ''
+  for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i])
+  return btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
+}
+
+describe('share link format versioning', () => {
+  it('new tokens carry a version prefix and round-trip via decodeShare', async () => {
+    const token = await encodeWorkflow(sampleWorkflow)
+    expect(token[0]).toBe('1')
+    const res = await decodeShare(token)
+    expect(res).toEqual({ json: sampleWorkflow, version: 1, error: null })
+  })
+
+  it('still decodes legacy (unversioned) tokens', async () => {
+    // legacy format: '<codec r><base64url(workflow json)>', no envelope
+    const legacy = 'r' + toBase64Url(sampleWorkflow)
+    expect(await decodeWorkflow(legacy)).toBe(sampleWorkflow)
+    const res = await decodeShare(legacy)
+    expect(res.version).toBe(0)
+    expect(res.json).toBe(sampleWorkflow)
+    expect(res.error).toBeNull()
+  })
+
+  it('extracts the workflow from a FUTURE version that honors the `w` contract', async () => {
+    const envelope = JSON.stringify({ v: 7, newField: { whatever: true }, w: sampleWorkflow })
+    const future = '7r' + toBase64Url(envelope)
+    const res = await decodeShare(future)
+    expect(res.version).toBe(7)
+    expect(res.json).toBe(sampleWorkflow)
+    expect(res.error).toBeNull()
+  })
+
+  it('reports unsupported-version when a future token has no usable workflow', async () => {
+    const future = '9r' + toBase64Url(JSON.stringify({ v: 9, blob: 'opaque' }))
+    const res = await decodeShare(future)
+    expect(res.json).toBeNull()
+    expect(res.error).toBe('unsupported-version')
+  })
+
+  it('reports corrupt for a damaged current-version token', async () => {
+    const res = await decodeShare('1g!!!!notbase64!!!!')
+    expect(res.json).toBeNull()
+    expect(res.error).toBe('corrupt')
+    // a v1 envelope missing `w` is corrupt, not unsupported
+    const noW = '1r' + toBase64Url(JSON.stringify({ v: 1 }))
+    expect((await decodeShare(noW)).error).toBe('corrupt')
+  })
+
+  it('accepts an envelope whose w is an object (stringifies it)', async () => {
+    const wfObj = { name: 'X', nodes: [], connections: {} }
+    const tok = '1r' + toBase64Url(JSON.stringify({ v: 1, w: wfObj }))
+    const res = await decodeShare(tok)
+    expect(JSON.parse(res.json)).toEqual(wfObj)
   })
 })

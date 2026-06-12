@@ -107,6 +107,8 @@ export const translations = {
     shareCopied: '\u2713 Link disalin',
     shareTooLong: 'Workflow terlalu besar untuk dibagikan via link \u2014 pakai Download.',
     shareLoaded: 'Workflow dimuat dari link yang dibagikan.',
+    errShareVersion: 'Link share ini dibuat dengan versi app yang lebih baru. Refresh halaman (atau buka versi terbaru) lalu coba lagi.',
+    errShareCorrupt: 'Link share ini tidak bisa dibaca — mungkin terpotong saat disalin. Minta link baru, lalu pastikan tersalin utuh.',
     // Status
     statusReady: 'Siap',
     statusGenerating: 'Membuat workflow...',
@@ -289,6 +291,8 @@ export const translations = {
     shareCopied: '\u2713 Link copied',
     shareTooLong: 'Workflow is too large to share via link \u2014 use Download instead.',
     shareLoaded: 'Workflow loaded from a shared link.',
+    errShareVersion: 'This share link was created with a newer version of the app. Refresh the page (or open the latest version) and try again.',
+    errShareCorrupt: 'This share link could not be read — it may have been truncated when copied. Ask for a new link and make sure it copies completely.',
     // Status
     statusReady: 'Ready',
     statusGenerating: 'Generating workflow...',
