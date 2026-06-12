@@ -691,3 +691,49 @@ describe('buildStructureRepairPrompt', () => {
     expect(p.length).toBeLessThan(70000)
   })
 })
+
+describe('buildRefinePrompt conversation context', () => {
+  const base = { currentJSON: '{"name":"Wf"}', instruction: 'add a filter', version: '1.x', lang: 'en' }
+
+  it('omits the conversation block when there is no context', () => {
+    const p = buildRefinePrompt(base)
+    expect(p).not.toContain('<conversation>')
+    const p2 = buildRefinePrompt({ ...base, context: { description: null, previousInstructions: [] } })
+    expect(p2).not.toContain('<conversation>')
+  })
+
+  it('replays the original request and earlier instructions (en)', () => {
+    const p = buildRefinePrompt({ ...base, context: { description: 'webhook to slack', previousInstructions: ['add error handling', 'rename the trigger'] } })
+    expect(p).toContain('<conversation>')
+    expect(p).toContain('Original request: webhook to slack')
+    expect(p).toContain('1. add error handling')
+    expect(p).toContain('2. rename the trigger')
+    expect(p).toContain('Do not undo changes from earlier instructions')
+    // history must come before the new instruction block
+    expect(p.indexOf('</conversation>')).toBeLessThan(p.indexOf('<instruction>\nadd a filter'))
+  })
+
+  it('replays the context in Indonesian for lang=id', () => {
+    const p = buildRefinePrompt({ ...base, lang: 'id', context: { description: 'webhook ke slack', previousInstructions: ['tambah error handling'] } })
+    expect(p).toContain('Permintaan awal: webhook ke slack')
+    expect(p).toContain('1. tambah error handling')
+    expect(p).toContain('Jangan batalkan perubahan dari instruksi sebelumnya')
+  })
+
+  it('keeps only the 10 most recent instructions and clips long text', () => {
+    const many = Array.from({ length: 15 }, (_, i) => 'instruction number ' + (i + 1))
+    const longDesc = 'x'.repeat(2500)
+    const p = buildRefinePrompt({ ...base, context: { description: longDesc, previousInstructions: many } })
+    expect(p).not.toContain('instruction number 5')
+    expect(p).toContain('instruction number 6')
+    expect(p).toContain('instruction number 15')
+    expect(p).toContain('x'.repeat(2000) + '\u2026')
+    expect(p).not.toContain('x'.repeat(2001))
+  })
+
+  it('ignores junk entries in previousInstructions', () => {
+    const p = buildRefinePrompt({ ...base, context: { previousInstructions: ['', '   ', null, 42, 'real one'] } })
+    expect(p).toContain('1. real one')
+    expect(p).not.toContain('2. ')
+  })
+})
